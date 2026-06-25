@@ -1,0 +1,38 @@
+# Environment
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+
+# Documentation (not tracked)
+docs/
+AGENTS.md
+
+# Local data
+data/
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/indexes/.gitkeep
+!data/indexes/faiss/
+!data/indexes/faiss/.gitkeep
+
+# Reports (regeneratable)
+reports/
+
+# Model / embedding artifacts
+*.faiss
+*.npy
+*.pkl
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
