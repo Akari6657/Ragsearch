@@ -4,38 +4,35 @@ from app.ingestion.chunk import chunk_paper, _build_chunk_text
 
 
 class TestBuildChunkText:
-    def test_all_fields(self):
+    def test_title_and_abstract(self):
         text = _build_chunk_text({
             "title": "A Great Paper",
+            "abstract": "We present a new approach.",
+        })
+        assert text == "Title: A Great Paper\nAbstract: We present a new approach."
+
+    def test_metadata_not_in_chunk(self):
+        """Year, venue, concepts should NOT appear in chunk text — only Title + Abstract."""
+        text = _build_chunk_text({
+            "title": "Test",
             "year": 2023,
             "venue": "SIGIR",
             "concepts": ["IR", "ML"],
-            "abstract": "We present a new approach.",
+            "abstract": "Findings.",
         })
-        assert "Title: A Great Paper" in text
-        assert "Year: 2023" in text
-        assert "Venue: SIGIR" in text
-        assert "Concepts: IR, ML" in text
-        assert "Abstract: We present a new approach." in text
+        assert "Year" not in text
+        assert "SIGIR" not in text
+        assert "IR" not in text
+        assert "Title: Test" in text
+        assert "Abstract: Findings." in text
 
-    def test_minimal_fields(self):
-        text = _build_chunk_text({
-            "title": "Lonely Paper",
-        })
-        assert "Title: Lonely Paper" in text
-        assert "Year:" not in text
-        assert "Abstract:" not in text
+    def test_title_only(self):
+        text = _build_chunk_text({"title": "Lonely Paper"})
+        assert text == "Title: Lonely Paper"
 
-    def test_missing_optional(self):
-        text = _build_chunk_text({
-            "title": "T",
-            "year": None,
-            "venue": None,
-            "concepts": [],
-            "abstract": "",
-        })
-        # Only title should appear
-        assert text == "Title: T"
+    def test_abstract_only(self):
+        text = _build_chunk_text({"title": "", "abstract": "Results here."})
+        assert text == "Abstract: Results here."
 
 
 class TestChunkPaper:

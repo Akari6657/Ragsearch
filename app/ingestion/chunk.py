@@ -1,9 +1,12 @@
 """
 Chunk generator: turn a normalized paper into searchable text segment(s).
 
-In v0.1, each paper produces exactly one "metadata" chunk that combines
-title, year, venue, concepts, and abstract into a single searchable text.
-Future versions can add per-section or per-paragraph chunking.
+Chunk text is "Title: ...\nAbstract: ..." — the semantically dense core.
+Metadata fields (year, venue, concepts, authors) stay in the papers table
+for filtering, not in chunk text, to keep vector embeddings clean.
+
+v0.1: one chunk per paper.
+v0.2+: per-section chunking when full text is available.
 
 Usage:
     from app.ingestion.chunk import chunk_paper
@@ -24,33 +27,25 @@ def _estimate_tokens(text: str) -> int:
 
 
 def _build_chunk_text(paper: dict[str, Any]) -> str:
-    """Assemble the searchable text from paper fields."""
-    parts: list[tuple[str, str]] = [
-        ("Title", paper.get("title", "")),
-    ]
+    """Assemble searchable text: Title + Abstract only.
 
-    year = paper.get("year")
-    if year is not None:
-        parts.append(("Year", str(year)))
+    Year, venue, concepts, and authors are deliberately excluded —
+    they live in the papers table for structured filtering,
+    not in the chunk text that gets embedded.
+    """
+    title = paper.get("title", "")
+    abstract = paper.get("abstract", "")
 
-    venue = paper.get("venue")
-    if venue:
-        parts.append(("Venue", venue))
-
-    concepts = paper.get("concepts")
-    if concepts:
-        parts.append(("Concepts", ", ".join(concepts)))
-
-    abstract = paper.get("abstract")
-    if abstract:
-        parts.append(("Abstract", abstract))
-
-    text = "\n".join(f"{label}: {value}" for label, value in parts)
-    return text
+    if title and abstract:
+        return f"Title: {title}\nAbstract: {abstract}"
+    elif title:
+        return f"Title: {title}"
+    else:
+        return f"Abstract: {abstract}"
 
 
 def chunk_paper(paper: dict[str, Any]) -> dict[str, Any]:
-    """Create a single metadata chunk from a normalized paper.
+    """Create a single chunk from a normalized paper.
 
     Args:
         paper: Normalized paper dict (from normalize.py).
