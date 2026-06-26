@@ -68,6 +68,10 @@ class SearchRequest(BaseModel):
         le=1.0,
         description="Hybrid weight: 0=pure semantic, 1=pure keyword, 0.5=equal (default)",
     )
+    include_overview: bool = Field(
+        default=False,
+        description="Whether to generate an AI Overview alongside search results",
+    )
 
 
 class SearchResult(BaseModel):
@@ -90,6 +94,7 @@ class SearchResponse(BaseModel):
     mode: str
     total_results: int
     results: list[SearchResult]
+    ai_overview: AskResponse | None = Field(default=None, description="AI-generated overview (only when requested)")
     latency_ms: float = Field(default=0.0, description="Server-side processing time in milliseconds")
 
 

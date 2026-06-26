@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.core.schemas import SearchRequest, SearchResponse
+from app.rag.router import route_query
+from app.rag.answer import answer_question
 from app.retrieval.lexical import search_lexical
 from app.retrieval.vector_store import search_vector
 from app.retrieval.hybrid import search_hybrid
@@ -35,6 +37,9 @@ def search_papers(request: SearchRequest) -> SearchResponse:
     - lexical: SQLite FTS5 BM25 keyword search
     - vector:  FAISS cosine similarity over BGE-small-en embeddings
     - hybrid:  weighted combination (alpha controls lexical vs vector weight)
+
+    When include_overview=True, the router decides whether to generate
+    an AI Overview (RAG answer) alongside the search results.
     """
     start = time.perf_counter()
 
@@ -68,14 +73,32 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             index_dir=DEFAULT_INDEX_DIR,
         )
 
+    # — AI Overview (optional) ——————————————————————————————————————————
+    ai_overview = None
+    if request.include_overview:
+        router_result = route_query(request.query)
+        if router_result.should_rag:
+            logger.info("AI Overview triggered: %s", router_result.reason)
+            ai_overview = answer_question(
+                question=request.query,
+                top_k=min(request.top_k, 8),
+                retrieval_mode=request.mode,
+                alpha=request.alpha,
+                use_rewrite=router_result.needs_rewrite,
+                db_path=DEFAULT_DB_PATH,
+                index_dir=DEFAULT_INDEX_DIR,
+            )
+        else:
+            logger.info("AI Overview skipped: %s", router_result.reason)
+
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     logger.info(
-        "search mode=%s alpha=%.2f query=%r top_k=%d → %d results in %.1f ms",
+        "search mode=%s alpha=%.2f overview=%s query=%r → %d results in %.1f ms",
         request.mode,
         request.alpha,
+        ai_overview is not None,
         request.query,
-        request.top_k,
         len(results),
         elapsed_ms,
     )
@@ -85,5 +108,6 @@ def search_papers(request: SearchRequest) -> SearchResponse:
         mode=request.mode,
         total_results=len(results),
         results=results,
+        ai_overview=ai_overview,
         latency_ms=round(elapsed_ms, 2),
     )
