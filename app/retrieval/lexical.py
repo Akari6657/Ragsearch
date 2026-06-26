@@ -28,8 +28,9 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-FTS5_SPECIAL = set("()*^\"-:{}[]")
-"""FTS5 syntax characters to strip from user input."""
+FTS5_SPECIAL = set("()*^\":{}[]")
+"""FTS5 syntax characters to strip from user input.  Hyphen is deliberately
+kept — FTS5's tokenizer splits 'retrieval-augmented' into two tokens."""
 
 PHRASE_BOOST_C = 0.3
 """Phrase boost coefficient. Controls how much each phrase hit increases the score."""
@@ -84,10 +85,13 @@ def _parse_query(query: str) -> tuple[str, list[str]]:
     # Strip FTS5 special characters and quotes (keep all words)
     cleaned = "".join(ch for ch in query if ch not in FTS5_SPECIAL and ch != '"')
 
-    # Split into words — all go into OR query
+    # Split into words — all go into OR query.
+    # Words containing hyphens must be quoted so FTS5 doesn't interpret
+    # "state-of" as a column reference.
     words = cleaned.lower().split()
+    safe_words = [f'"{w}"' if "-" in w else w for w in words]
 
-    fts5_query = " ".join(words) if words else ""
+    fts5_query = " ".join(safe_words) if safe_words else ""
 
     return fts5_query, phrases
 
