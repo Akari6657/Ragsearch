@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.retrieval.lexical import search_lexical, _sanitize_query
+from app.retrieval.lexical import search_lexical, _parse_query
 
 
 # ---------------------------------------------------------------------------
@@ -96,19 +96,31 @@ def test_db():
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestSanitizeQuery:
-    def test_simple(self):
-        result = _sanitize_query("neural network")
-        assert "neural network" in result
+class TestParseQuery:
+    def test_simple_or(self):
+        fts5, phrases = _parse_query("neural network")
+        assert fts5 == "neural network"
+        assert phrases == []
+
+    def test_quoted_phrase(self):
+        fts5, phrases = _parse_query('"neural network"')
+        assert fts5 == "neural network"
+        assert phrases == ["neural network"]
+
+    def test_mixed(self):
+        fts5, phrases = _parse_query('computer "neural network" optimization')
+        assert fts5 == "computer neural network optimization"
+        assert phrases == ["neural network"]
 
     def test_special_chars(self):
-        result = _sanitize_query("test (query)")
-        assert "(" not in result
-        assert ")" not in result
+        fts5, phrases = _parse_query("test (query)")
+        assert "(" not in fts5
+        assert ")" not in fts5
 
     def test_empty(self):
-        result = _sanitize_query("")
-        assert result == '""'
+        fts5, phrases = _parse_query("")
+        assert fts5 == ""
+        assert phrases == []
 
 
 class TestSearchLexical:
