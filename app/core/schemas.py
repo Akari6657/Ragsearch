@@ -91,3 +91,46 @@ class SearchResponse(BaseModel):
     total_results: int
     results: list[SearchResult]
     latency_ms: float = Field(default=0.0, description="Server-side processing time in milliseconds")
+
+
+# ---------------------------------------------------------------------------
+# RAG / Ask models (v0.3+)
+# ---------------------------------------------------------------------------
+
+
+class AskRequest(BaseModel):
+    """Incoming RAG question (POST /ask)."""
+
+    question: str = Field(..., min_length=1, description="Natural-language question")
+    top_k: int = Field(default=8, ge=1, le=20, description="Number of evidence chunks to retrieve")
+    retrieval_mode: Literal["lexical", "vector", "hybrid"] = Field(
+        default="hybrid",
+        description="Search mode for evidence retrieval",
+    )
+    alpha: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Hybrid weight (default 0.3 = bias toward semantic for QA)",
+    )
+
+
+class CitationInfo(BaseModel):
+    """Metadata for one citation marker."""
+
+    citation_id: int
+    paper_id: str
+    chunk_id: str
+    title: str
+    url: str | None = None
+
+
+class AskResponse(BaseModel):
+    """Complete RAG answer response (POST /ask)."""
+
+    question: str
+    answer: str
+    citations: list[CitationInfo] = Field(default_factory=list)
+    citation_valid: bool = True
+    citation_warnings: list[str] = Field(default_factory=list)
+    latency_ms: float = Field(default=0.0, description="End-to-end processing time in milliseconds")

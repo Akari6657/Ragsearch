@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.api.routes_search import router as search_router
+from app.api.routes_ask import router as ask_router
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -22,10 +23,11 @@ from app.api.routes_search import router as search_router
 app = FastAPI(
     title="CiteQuest-RAG",
     description="Academic Search + Citation-grounded RAG + Lightweight Research Agent",
-    version="0.1.0",
+    version="0.3.0",
 )
 
 app.include_router(search_router)
+app.include_router(ask_router)
 
 # ---------------------------------------------------------------------------
 # Logging

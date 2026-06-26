@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-FTS5_SPECIAL = set("()*^\":{}[]")
+FTS5_SPECIAL = set("()*^\":{}[]?!")
 """FTS5 syntax characters to strip from user input.  Hyphen is deliberately
 kept — FTS5's tokenizer splits 'retrieval-augmented' into two tokens."""
 
