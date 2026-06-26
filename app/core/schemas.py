@@ -62,6 +62,12 @@ class SearchRequest(BaseModel):
     )
     year_from: int | None = Field(default=None, description="Optional: earliest publication year")
     year_to: int | None = Field(default=None, description="Optional: latest publication year")
+    alpha: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Hybrid weight: 0=pure semantic, 1=pure keyword, 0.5=equal (default)",
+    )
 
 
 class SearchResult(BaseModel):
