@@ -430,12 +430,6 @@ body {
   line-height: 1.6;
 }
 
-.result-card .r-snippet mark {
-  background: var(--cite-highlight);
-  padding: 0 1px;
-  border-radius: 2px;
-}
-
 .result-card .r-score {
   flex-shrink: 0;
   font-size: 0.8rem;

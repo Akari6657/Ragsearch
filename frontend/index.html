@@ -177,7 +177,7 @@
                    :value="r.paper_id">
 
             <div class="result-body">
-              <div class="r-title" x-text="r.title"></div>
+              <div class="r-title" x-html="highlightTitle(r.title, query)"></div>
               <div class="r-meta">
                 <span x-text="(r.year || '?') + ' · ' + (r.venue || 'arXiv')"></span>
                 <template x-if="r.authors?.length">
@@ -186,11 +186,9 @@
               </div>
               <div class="r-snippet"
                    x-show="r.snippet"
-                   x-html="r.snippet">
+                   x-text="r.snippet">
               </div>
             </div>
-
-            <div class="r-score" x-text="r.score?.toFixed(4)"></div>
           </article>
         </template>
       </div>

@@ -145,6 +145,7 @@ def search_vector(
                 authors=[],
                 score=h["score"],
                 snippet="",
+                abstract="",
             )
             for h in hits
         ]
@@ -155,7 +156,7 @@ def search_vector(
         chunk_ids = [h["chunk_id"] for h in hits]
         placeholders = ",".join("?" for _ in chunk_ids)
         rows = conn.execute(
-            f"""SELECT p.paper_id, p.title, p.year, p.venue, p.authors_json,
+            f"""SELECT p.paper_id, p.title, p.year, p.venue, p.authors_json, p.abstract,
                        c.chunk_text
                 FROM chunks c
                 JOIN papers p ON c.paper_id = p.paper_id
@@ -178,6 +179,7 @@ def search_vector(
             "year": row["year"],
             "venue": row["venue"],
             "authors": authors,
+            "abstract": (row["abstract"] or "")[:300],
         }
 
     # — 6. Build SearchResult list ——————————————————————————————————————
@@ -194,6 +196,7 @@ def search_vector(
                 authors=m.get("authors", []),
                 score=round(h["score"], 4),
                 snippet="",  # FAISS has no snippet; hybrid layer can fill from lexical
+                abstract=m.get("abstract", ""),
             )
         )
 

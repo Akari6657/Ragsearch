@@ -91,6 +91,12 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             logger.info("Query enriched: '%s' → '%s', +%d extra results",
                         request.query[:60], keywords[:60], len(kw_results))
 
+    # — Snippet: always use abstract preview (chunk_text contains title, which
+    #   would duplicate the title already shown in the result card). FTS5
+    #   snippet from chunk_text is discarded.
+    for r in results:
+        r.snippet = r.abstract[:300] if r.abstract else ""
+
     # — Router (always run, even when include_overview=False) ———————————
     router_result = route_query(request.query)
 

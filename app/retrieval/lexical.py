@@ -50,6 +50,7 @@ SELECT
     p.year,
     p.venue,
     p.authors_json,
+    p.abstract,
     c.chunk_text,
     bm25(chunk_fts) AS score,
     snippet(chunk_fts, 2, '<mark>', '</mark>', '...', 40) AS snippet
@@ -220,6 +221,7 @@ def search_lexical(
             authors=_parse_authors(row["authors_json"]),
             score=round(boosted_score, 4),
             snippet=snippet,
+            abstract=(row["abstract"] or "")[:300],
         )
         candidates.append((boosted_score, sr))
 

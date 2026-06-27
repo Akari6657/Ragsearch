@@ -85,6 +85,7 @@ class SearchResult(BaseModel):
     authors: list[str] = Field(default_factory=list)
     score: float = Field(..., description="Relevance score (higher is better)")
     snippet: str = Field(default="", description="Relevant text excerpt from the chunk")
+    abstract: str = Field(default="", description="Paper abstract (first ~300 chars)")
 
 
 class SearchResponse(BaseModel):
