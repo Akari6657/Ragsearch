@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS papers (
     paper_id   TEXT PRIMARY KEY,
     title      TEXT    NOT NULL,
     abstract   TEXT    NOT NULL DEFAULT '',
+    full_text  TEXT    NOT NULL DEFAULT '',
     year       INTEGER,
     venue      TEXT,
     authors_json TEXT  NOT NULL DEFAULT '[]',
@@ -62,10 +63,10 @@ CREATE INDEX IF NOT EXISTS idx_papers_year      ON papers (year);
 
 INSERT_PAPER = """
 INSERT OR REPLACE INTO papers
-    (paper_id, title, abstract, year, venue, authors_json, concepts_json,
+    (paper_id, title, abstract, full_text, year, venue, authors_json, concepts_json,
      doi, url, citation_count, open_access)
 VALUES
-    (:paper_id, :title, :abstract, :year, :venue, :authors_json, :concepts_json,
+    (:paper_id, :title, :abstract, :full_text, :year, :venue, :authors_json, :concepts_json,
      :doi, :url, :citation_count, :open_access)
 """
 

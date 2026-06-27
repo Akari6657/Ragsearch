@@ -104,10 +104,12 @@ def normalize(record: dict[str, Any]) -> dict[str, Any] | None:
 
     # — optional fields with defaults ——————————————————————————————————
     abstract = _clean_str(record.get("abstract", ""))
+    full_text = _clean_str(record.get("full_text", ""))  # peS2o full-text
     year = _to_int(record.get("year"))
     venue = _clean_str(record.get("venue", "")) or None
     authors = _to_str_list(record.get("authors"))
-    concepts = _to_str_list(record.get("concepts"))
+    # support both "concepts" (arXiv) and "fields_of_study" (peS2o)
+    concepts = _to_str_list(record.get("concepts") or record.get("fields_of_study"))
     doi = _clean_str(record.get("doi", "")) or None
     url = _clean_str(record.get("url", "")) or None
     citation_count = _to_int(record.get("citation_count", 0), default=0, min_val=0) or 0
@@ -117,6 +119,7 @@ def normalize(record: dict[str, Any]) -> dict[str, Any] | None:
         "paper_id": paper_id,
         "title": title,
         "abstract": abstract,
+        "full_text": full_text,
         "year": year,
         "venue": venue,
         "authors": authors,
