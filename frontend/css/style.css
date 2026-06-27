@@ -73,7 +73,7 @@ body {
 
 .search-row input[type="search"] {
   flex: 1;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 2.5rem;  /* left padding for Pico's search icon */
   font-size: 1rem;
 }
 
@@ -219,29 +219,95 @@ body {
   line-height: 1.7;
 }
 
-.overview .citations {
+/* ---- Citation section (collapsible list) ---- */
+
+.citation-section {
+  margin-top: 4px;
+}
+
+.citation-toggle {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.cite-card {
-  background: #fff;
-  border: 1px solid var(--cite-border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 0.8rem;
-  max-width: 240px;
-}
-
-.cite-card strong {
-  display: block;
-  margin-bottom: 2px;
-}
-
-.cite-card .cite-url {
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
   color: var(--pico-primary);
+  margin-bottom: 0;
+}
+
+.citation-toggle:hover {
+  color: var(--pico-primary-hover);
+}
+
+.citation-arrow {
+  display: inline-block;
+  font-size: 0.7rem;
+  transition: transform 0.2s;
+  line-height: 1;
+}
+
+.citation-arrow.is-open {
+  transform: rotate(90deg);
+}
+
+.citation-count {
+  color: var(--cite-muted);
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+.citation-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.citation-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--cite-border);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.citation-item:first-child {
+  border-top: none;
+}
+
+.citation-id {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--pico-primary);
+  font-size: 0.8rem;
+  min-width: 28px;
+}
+
+.citation-title {
+  flex: 1;
+  color: var(--text);
+}
+
+.citation-link {
+  flex-shrink: 0;
   font-size: 0.75rem;
+  color: var(--pico-primary);
+  text-decoration: none;
+  padding: 2px 8px;
+  border: 1px solid var(--cite-border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.citation-link:hover {
+  background: var(--cite-overview-bg);
+  text-decoration: none;
 }
 
 .warning-tag {

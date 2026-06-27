@@ -106,18 +106,26 @@
         <span class="warning-tag" x-text="'⚠ ' + w"></span>
       </template>
 
-      <!-- Citation cards -->
-      <div class="citations" x-show="overview?.citations?.length">
-        <template x-for="c in overview?.citations || []">
-          <div class="cite-card">
-            <strong x-text="'[' + c.citation_id + '] ' + (c.title || '')"></strong>
-            <span class="cite-url">
-              <template x-if="c.url">
-                <a :href="c.url" target="_blank" rel="noopener">arXiv</a>
-              </template>
-            </span>
-          </div>
-        </template>
+      <!-- Citation list (collapsible) -->
+      <div class="citation-section" x-show="overview?.citations?.length">
+        <button class="citation-toggle"
+                @click="showCitations = !showCitations"
+                :aria-expanded="showCitations">
+          <span class="citation-arrow" :class="{ 'is-open': showCitations }">▸</span>
+          📚 引用来源
+          <span class="citation-count" x-text="'(' + overview.citations.length + ')'"></span>
+        </button>
+
+        <ol class="citation-list" x-show="showCitations" x-transition>
+          <template x-for="c in overview?.citations || []" :key="c.citation_id">
+            <li class="citation-item">
+              <span class="citation-id" x-text="'[' + c.citation_id + ']'"></span>
+              <span class="citation-title" x-text="c.title"></span>
+              <a x-show="c.url" :href="c.url" target="_blank"
+                 rel="noopener" class="citation-link">arXiv</a>
+            </li>
+          </template>
+        </ol>
       </div>
     </section>
 
@@ -225,6 +233,9 @@
       overview: null,
       totalResults: 0,
       elapsed: 0,
+
+      // Citation toggle
+      showCitations: true,
 
       // Future compare feature (not wired to backend yet)
       selected: [],
