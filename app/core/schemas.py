@@ -96,6 +96,8 @@ class SearchResponse(BaseModel):
     results: list[SearchResult]
     ai_overview: AskResponse | None = Field(default=None, description="AI-generated overview (only when requested)")
     latency_ms: float = Field(default=0.0, description="Server-side processing time in milliseconds")
+    should_rag: bool = Field(default=False, description="Router decision: whether this query should trigger RAG")
+    rag_reason: str = Field(default="", description="Human-readable routing reason")
 
 
 # ---------------------------------------------------------------------------

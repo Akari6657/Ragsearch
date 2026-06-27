@@ -310,8 +310,9 @@
         this.elapsed = (performance.now() - start) / 1000;
         this.loading = false;  // results are ready — show them immediately
 
-        // ---- Phase 2: AI Overview (async SSE, only if toggle is on) ----
+        // ---- Phase 2: AI Overview (async SSE, only if toggle on + router says yes) ----
         if (!wantOverview) return;
+        if (!data.should_rag) return;  // router decided against RAG (e.g. short keywords)
 
         this.overviewLoading = true;
         this.overviewPhase = "retrieving";

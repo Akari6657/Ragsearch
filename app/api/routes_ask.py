@@ -46,7 +46,21 @@ async def ask_question_stream(request: AskRequest):
     - ``status`` — pipeline phase change (retrieving/organizing/generating/verifying)
     - ``result`` — final AskResponse as JSON
     - ``done``   — stream end marker
+
+    The router runs first; if it decides against RAG, an empty result
+    is returned immediately without calling the LLM.
     """
+    from app.rag.router import route_query
+
+    router_result = route_query(request.question)
+    if not router_result.should_rag:
+        logger.info("ask/stream skipped by router: %s", router_result.reason)
+        return StreamingResponse(
+            _router_skip_stream(request.question, router_result.reason),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     logger.info("ask/stream question=%r top_k=%d mode=%s", request.question, request.top_k, request.retrieval_mode)
 
     return StreamingResponse(
@@ -63,3 +77,10 @@ async def ask_question_stream(request: AskRequest):
             "X-Accel-Buffering": "no",  # disable nginx buffering
         },
     )
+
+
+async def _router_skip_stream(question: str, reason: str):
+    """Yield a minimal SSE stream when the router says no RAG is needed."""
+    import json
+    yield f"event: status\ndata: {json.dumps({'phase': 'skipped', 'message': f'路由判断：{reason}，跳过 AI Overview'})}\n\n"
+    yield f"event: done\ndata: \n\n"
