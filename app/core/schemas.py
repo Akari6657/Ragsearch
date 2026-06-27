@@ -120,6 +120,10 @@ class AskRequest(BaseModel):
         le=1.0,
         description="Hybrid weight (default 0.3 = bias toward semantic for QA)",
     )
+    pre_retrieved: list[dict] | None = Field(
+        default=None,
+        description="Pre-retrieved results from /search. When provided, skips internal retrieval.",
+    )
 
 
 class CitationInfo(BaseModel):

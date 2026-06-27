@@ -15,6 +15,7 @@ from fastapi import APIRouter, HTTPException
 from app.core.schemas import SearchRequest, SearchResponse
 from app.rag.router import route_query
 from app.rag.answer import answer_question
+from app.rag.rewriter import rewrite_query, detect_language
 from app.retrieval.lexical import search_lexical
 from app.retrieval.vector_store import search_vector
 from app.retrieval.hybrid import search_hybrid
@@ -73,19 +74,35 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             index_dir=DEFAULT_INDEX_DIR,
         )
 
+    # — Query enrichment: Chinese → extract English keywords → extra lexical search —
+    if detect_language(request.query) == "zh":
+        keywords = rewrite_query(request.query)
+        if keywords and keywords != request.query:
+            kw_results = search_lexical(
+                keywords, top_k=request.top_k, db_path=DEFAULT_DB_PATH,
+            )
+            seen = {r.chunk_id for r in results}
+            for r in kw_results:
+                if r.chunk_id not in seen:
+                    results.append(r)
+                    seen.add(r.chunk_id)
+            logger.info("Query enriched: '%s' → '%s', +%d extra results",
+                        request.query[:60], keywords[:60], len(kw_results))
+
     # — Router (always run, even when include_overview=False) ———————————
     router_result = route_query(request.query)
 
-    # — AI Overview (optional) ——————————————————————————————————————————
+    # — AI Overview (optional, reuses search results — no separate retrieval) —
     ai_overview = None
     if request.include_overview and router_result.should_rag:
         logger.info("AI Overview triggered: %s", router_result.reason)
+        n_chunks = min(request.top_k, 8)
         ai_overview = answer_question(
             question=request.query,
-            top_k=min(request.top_k, 8),
+            pre_retrieved=results[:n_chunks],
+            top_k=n_chunks,
             retrieval_mode=request.mode,
             alpha=request.alpha,
-            use_rewrite=router_result.needs_rewrite,
             db_path=DEFAULT_DB_PATH,
             index_dir=DEFAULT_INDEX_DIR,
         )

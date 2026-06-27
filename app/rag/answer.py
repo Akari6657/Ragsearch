@@ -19,12 +19,11 @@ import logging
 import time
 from pathlib import Path
 
-from app.core.schemas import AskRequest, AskResponse, CitationInfo
+from app.core.schemas import AskRequest, AskResponse, CitationInfo, SearchResult
 from app.rag.citation import verify_citations
 from app.rag.context_builder import build_evidence
 from app.rag.llm_provider import create_provider
 from app.rag.prompt import build_prompts
-from app.rag.rewriter import rewrite_query
 from app.retrieval.hybrid import search_hybrid
 from app.retrieval.lexical import search_lexical
 
@@ -36,30 +35,29 @@ DEFAULT_INDEX_DIR = Path("data/indexes/faiss")
 
 def answer_question(
     question: str,
+    pre_retrieved: list | None = None,
     top_k: int = 8,
     retrieval_mode: str = "hybrid",
     alpha: float = 0.3,
-    use_rewrite: bool = True,
     db_path: str | Path = DEFAULT_DB,
     index_dir: str | Path = DEFAULT_INDEX_DIR,
 ) -> AskResponse:
     """Answer a question with citation-grounded RAG.
 
     Pipeline:
-    1. (Optional) Rewrite query → extract English keywords.
-    2. Retrieve evidence: hybrid search on original query + lexical
-       search on rewritten keywords → merge + deduplicate.
-    3. Format evidence block with [N] citation IDs.
-    4. Build system + user prompts.
-    5. Call LLM to generate an answer.
-    6. Verify that citation markers are valid.
+    1. Use pre_retrieved results (if provided), otherwise do internal retrieval.
+    2. Format evidence block with [N] citation IDs.
+    3. Build system + user prompts.
+    4. Call LLM to generate an answer.
+    5. Verify that citation markers are valid.
 
     Args:
         question: Natural-language question.
-        top_k: Number of evidence chunks to retrieve.
-        retrieval_mode: 'lexical', 'vector', or 'hybrid'.
-        alpha: Hybrid weight (0=vector, 1=lexical).
-        use_rewrite: If True, extract English keywords to enhance retrieval.
+        pre_retrieved: Optional pre-retrieved search results from /search.
+                       When provided, internal retrieval is skipped entirely.
+        top_k: Number of evidence chunks (only used if pre_retrieved is None).
+        retrieval_mode: 'lexical', 'vector', or 'hybrid' (fallback only).
+        alpha: Hybrid weight (fallback only).
 
     Returns:
         AskResponse with answer text, citations, validity, and latency.
@@ -68,33 +66,24 @@ def answer_question(
     db_path = Path(db_path)
     index_dir = Path(index_dir)
 
-    # — 1. Retrieve evidence (with optional rewrite) ———————————————————
-    if retrieval_mode == "hybrid":
-        results = search_hybrid(
-            question, top_k=top_k, alpha=alpha, db_path=db_path, index_dir=index_dir
-        )
-    elif retrieval_mode == "vector":
-        from app.retrieval.vector_store import search_vector
-        results = search_vector(question, top_k=top_k, db_path=db_path, index_dir=index_dir)
+    # — 1. Evidence: reuse pre-retrieved or do internal retrieval ———————
+    if pre_retrieved is not None:
+        results = _dicts_to_search_results(pre_retrieved)
+        results = results[:top_k]
+        logger.info("Using %d pre-retrieved chunks for question: %s", len(results), question[:60])
     else:
-        results = search_lexical(question, top_k=top_k, db_path=db_path)
-
-    # Rewrite-enhanced retrieval: add lexical results for English keywords.
-    # Lexical results are appended after the primary results (which are
-    # already relevance-sorted). We don't re-sort because hybrid scores
-    # (positive, higher=better) and BM25 scores (negative, lower=better)
-    # are on incompatible scales.
-    if use_rewrite:
-        keywords = rewrite_query(question)
-        if keywords and keywords != question:
-            kw_results = search_lexical(keywords, top_k=top_k, db_path=db_path)
-            seen = {r.chunk_id for r in results}
-            for r in kw_results:
-                if r.chunk_id not in seen:
-                    results.append(r)
-                    seen.add(r.chunk_id)
-
-    logger.info("Retrieved %d evidence chunks for question: %s", len(results), question[:60])
+        # Fallback: standalone /ask call without pre-retrieved results
+        if retrieval_mode == "hybrid":
+            results = search_hybrid(
+                question, top_k=top_k, alpha=alpha,
+                db_path=db_path, index_dir=index_dir,
+            )
+        elif retrieval_mode == "vector":
+            from app.retrieval.vector_store import search_vector
+            results = search_vector(question, top_k=top_k, db_path=db_path, index_dir=index_dir)
+        else:
+            results = search_lexical(question, top_k=top_k, db_path=db_path)
+        logger.info("Retrieved %d evidence chunks for question: %s", len(results), question[:60])
 
     # — 2. Build evidence context ———————————————————————————————————————
     evidence_text, citation_map = build_evidence(results, db_path=db_path)
@@ -182,12 +171,23 @@ _PHASE_MESSAGES = {
 }
 
 
+def _dicts_to_search_results(raw: list[dict]) -> list[SearchResult]:
+    """Convert pre-retrieved dicts (from JSON transport) back to SearchResult objects."""
+    results = []
+    for d in raw:
+        try:
+            results.append(SearchResult(**d))
+        except Exception:
+            pass  # skip malformed entries
+    return results
+
+
 async def answer_question_stream(
     question: str,
+    pre_retrieved: list | None = None,
     top_k: int = 8,
     retrieval_mode: str = "hybrid",
     alpha: float = 0.3,
-    use_rewrite: bool = True,
     db_path: str | Path = DEFAULT_DB,
     index_dir: str | Path = DEFAULT_INDEX_DIR,
 ):
@@ -207,34 +207,31 @@ async def answer_question_stream(
     db_path = Path(db_path)
     index_dir = Path(index_dir)
 
-    # ---- Phase 1: Retrieving -----------------------------------------------
-    yield _sse("status", {"phase": "retrieving", "message": _PHASE_MESSAGES["retrieving"]})
+    # ---- Phase 1: Retrieving / Organizing ----------------------------------
+    if pre_retrieved is not None:
+        results = _dicts_to_search_results(pre_retrieved)
+        results = results[:top_k]
+        logger.info("Using %d pre-retrieved chunks for question: %s", len(results), question[:60])
+        # Skip "retrieving" phase — results are already available
+    else:
+        # Fallback: do internal retrieval
+        yield _sse("status", {"phase": "retrieving", "message": _PHASE_MESSAGES["retrieving"]})
 
-    def _retrieve():
-        if retrieval_mode == "hybrid":
-            results = search_hybrid(
-                question, top_k=top_k, alpha=alpha,
-                db_path=db_path, index_dir=index_dir,
-            )
-        elif retrieval_mode == "vector":
-            from app.retrieval.vector_store import search_vector
-            results = search_vector(question, top_k=top_k, db_path=db_path, index_dir=index_dir)
-        else:
-            results = search_lexical(question, top_k=top_k, db_path=db_path)
+        def _retrieve():
+            if retrieval_mode == "hybrid":
+                r = search_hybrid(
+                    question, top_k=top_k, alpha=alpha,
+                    db_path=db_path, index_dir=index_dir,
+                )
+            elif retrieval_mode == "vector":
+                from app.retrieval.vector_store import search_vector
+                r = search_vector(question, top_k=top_k, db_path=db_path, index_dir=index_dir)
+            else:
+                r = search_lexical(question, top_k=top_k, db_path=db_path)
+            return r
 
-        if use_rewrite:
-            keywords = rewrite_query(question)
-            if keywords and keywords != question:
-                kw_results = search_lexical(keywords, top_k=top_k, db_path=db_path)
-                seen = {r.chunk_id for r in results}
-                for r in kw_results:
-                    if r.chunk_id not in seen:
-                        results.append(r)
-                        seen.add(r.chunk_id)
-        return results
-
-    results = await asyncio.to_thread(_retrieve)
-    logger.info("Retrieved %d evidence chunks for question: %s", len(results), question[:60])
+        results = await asyncio.to_thread(_retrieve)
+        logger.info("Retrieved %d evidence chunks for question: %s", len(results), question[:60])
 
     # ---- Phase 2: Organizing -----------------------------------------------
     yield _sse("status", {"phase": "organizing", "message": _PHASE_MESSAGES["organizing"]})

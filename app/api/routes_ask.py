@@ -31,6 +31,7 @@ def ask_question(request: AskRequest) -> AskResponse:
 
     return answer_question(
         question=request.question,
+        pre_retrieved=request.pre_retrieved,
         top_k=request.top_k,
         retrieval_mode=request.retrieval_mode,
         alpha=request.alpha,
@@ -66,6 +67,7 @@ async def ask_question_stream(request: AskRequest):
     return StreamingResponse(
         answer_question_stream(
             question=request.question,
+            pre_retrieved=request.pre_retrieved,
             top_k=request.top_k,
             retrieval_mode=request.retrieval_mode,
             alpha=request.alpha,
