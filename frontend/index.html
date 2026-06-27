@@ -91,10 +91,22 @@
     </div>
 
     <!-- ==================================================================
-         AI Overview
+         AI Overview — loading state
          ================================================================== -->
 
-    <section class="overview" x-show="overview" x-transition>
+    <section class="overview overview-loading" x-show="overviewLoading" x-transition>
+      <div class="loading-header">
+        <span class="loading-spinner"></span>
+        <span>AI Overview</span>
+      </div>
+      <div class="loading-phase" x-text="overviewMessage"></div>
+    </section>
+
+    <!-- ==================================================================
+         AI Overview — result
+         ================================================================== -->
+
+    <section class="overview" x-show="overview && !overviewLoading" x-transition>
       <h3>
         AI Overview
         <small x-text="'· ' + formatLatency(overview?.latency_ms) + ' · ' + (overview?.model || '')"></small>
@@ -237,6 +249,11 @@
       // Citation toggle
       showCitations: true,
 
+      // Async AI Overview loading (SSE-driven)
+      overviewLoading: false,
+      overviewPhase: "retrieving",
+      overviewMessage: "",
+
       // Future compare feature (not wired to backend yet)
       selected: [],
       comparing: false,
@@ -256,36 +273,78 @@
         const q = this.query.trim();
         if (!q) return;
 
+        // Clear previous state
         this.loading = true;
         this.error = null;
         this.results = [];
         this.overview = null;
+        this.overviewLoading = false;
         this.totalResults = 0;
         this.elapsed = 0;
-        // Don't clear selected[] so the user can accumulate
-        // comparisons across searches if they want
+        if (this._overviewTimer) { clearInterval(this._overviewTimer); this._overviewTimer = null; }
+        if (this._abortStream) { this._abortStream.abort(); this._abortStream = null; }
 
         const start = performance.now();
+        const wantOverview = this.includeOverview;
+        const mode = this.mode;
+        const alpha = Number(this.alpha);
 
+        // ---- Phase 1: Search (always, fast) ----
         try {
           const data = await searchPapers({
             query: q,
-            mode: this.mode,
-            alpha: Number(this.alpha),
-            include_overview: this.includeOverview,
+            mode: mode,
+            alpha: alpha,
+            include_overview: false,  // don't wait for LLM
             top_k: 10,
           });
 
-          this.elapsed = (performance.now() - start) / 1000;
           this.results = data.results || [];
           this.totalResults = data.total_results || this.results.length;
-          this.overview = data.ai_overview || null;
         } catch (e) {
-          this.elapsed = (performance.now() - start) / 1000;
           this.error = e.message;
-        } finally {
           this.loading = false;
+          return;
         }
+
+        this.elapsed = (performance.now() - start) / 1000;
+        this.loading = false;  // results are ready — show them immediately
+
+        // ---- Phase 2: AI Overview (async SSE, only if toggle is on) ----
+        if (!wantOverview) return;
+
+        this.overviewLoading = true;
+        this.overviewPhase = "retrieving";
+        this.overviewMessage = "正在检索相关论文...";
+
+        const overviewStart = performance.now();
+
+        this._abortStream = askQuestionStream({
+          body: {
+            question: q,
+            retrieval_mode: mode,
+            alpha: alpha,
+            top_k: 8,
+          },
+          onEvent: (type, data) => {
+            if (type === "status") {
+              this.overviewPhase = data.phase || this.overviewPhase;
+              this.overviewMessage = data.message || this.overviewMessage;
+            } else if (type === "result") {
+              data.latency_ms = Math.round(performance.now() - overviewStart);
+              this.overview = data;
+            }
+          },
+          onDone: () => {
+            this.overviewLoading = false;
+            this._abortStream = null;
+          },
+          onError: (err) => {
+            console.warn("AI Overview stream failed:", err);
+            this.overviewLoading = false;
+            this._abortStream = null;
+          },
+        });
       },
     }));
   });
