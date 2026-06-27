@@ -12,6 +12,7 @@ import sqlite3
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_search import router as search_router
 from app.api.routes_ask import router as ask_router
@@ -22,12 +23,17 @@ from app.api.routes_ask import router as ask_router
 
 app = FastAPI(
     title="CiteQuest-RAG",
-    description="Academic Search + Citation-grounded RAG + Lightweight Research Agent",
-    version="0.3.0",
+    description="Academic Search + Citation-grounded RAG + AI Overview",
+    version="0.5.0",
 )
 
 app.include_router(search_router)
 app.include_router(ask_router)
+
+# Serve frontend static files
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+if frontend_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 
 # ---------------------------------------------------------------------------
 # Logging
