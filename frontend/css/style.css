@@ -360,9 +360,18 @@ body {
   display: inline-block;
 }
 
-/* --------------------------------------------------------------------------
-   Results header
-   -------------------------------------------------------------------------- */
+/* ---- Rewrite hint (Chinese → English keywords) ---- */
+
+.rewrite-hint {
+  background: var(--cite-overview-bg);
+  border: 1px solid var(--cite-overview-border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  color: var(--cite-muted);
+  line-height: 1.5;
+}
 
 .results-header {
   font-size: 0.85rem;

@@ -147,7 +147,8 @@
 
     <!-- Loading state -->
     <div class="loading-state" x-show="loading">
-      <span class="spinner"></span> 正在搜索...
+      <span class="spinner"></span>
+      <span x-text="loadingMessage">正在搜索...</span>
     </div>
 
     <!-- Error state -->
@@ -240,11 +241,13 @@
       alpha: 0.5,
       includeOverview: true,
       loading: false,
+      loadingMessage: "正在搜索...",
       error: null,
       results: [],
       overview: null,
       totalResults: 0,
       elapsed: 0,
+      rewriteKeywords: "",
 
       // Citation toggle
       showCitations: true,
@@ -275,12 +278,16 @@
 
         // Clear previous state
         this.loading = true;
+        this.loadingMessage = /[一-鿿]/.test(q)
+          ? "🔍 检测到中文查询，正在改写为英文关键词以提升召回..."
+          : "正在搜索...";
         this.error = null;
         this.results = [];
         this.overview = null;
         this.overviewLoading = false;
         this.totalResults = 0;
         this.elapsed = 0;
+        this.rewriteKeywords = "";
         if (this._overviewTimer) { clearInterval(this._overviewTimer); this._overviewTimer = null; }
         if (this._abortStream) { this._abortStream.abort(); this._abortStream = null; }
 
@@ -301,6 +308,8 @@
 
           this.results = data.results || [];
           this.totalResults = data.total_results || this.results.length;
+          this.rewriteKeywords = data.rewrite_keywords || "";
+          this._shouldRag = data.should_rag || false;  // save for Phase 2 check
         } catch (e) {
           this.error = e.message;
           this.loading = false;
@@ -312,7 +321,7 @@
 
         // ---- Phase 2: AI Overview (async SSE, only if toggle on + router says yes) ----
         if (!wantOverview) return;
-        if (!data.should_rag) return;  // router decided against RAG (e.g. short keywords)
+        if (!this._shouldRag) return;  // router decided against RAG (e.g. short keywords)
 
         this.overviewLoading = true;
         this.overviewPhase = "retrieving";

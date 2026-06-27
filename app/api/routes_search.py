@@ -75,9 +75,11 @@ def search_papers(request: SearchRequest) -> SearchResponse:
         )
 
     # — Query enrichment: Chinese → extract English keywords → extra lexical search —
+    rewrite_keywords = ""
     if detect_language(request.query) == "zh":
         keywords = rewrite_query(request.query)
         if keywords and keywords != request.query:
+            rewrite_keywords = keywords
             kw_results = search_lexical(
                 keywords, top_k=request.top_k, db_path=DEFAULT_DB_PATH,
             )
@@ -131,4 +133,5 @@ def search_papers(request: SearchRequest) -> SearchResponse:
         latency_ms=round(elapsed_ms, 2),
         should_rag=router_result.should_rag,
         rag_reason=router_result.reason,
+        rewrite_keywords=rewrite_keywords,
     )

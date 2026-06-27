@@ -98,6 +98,7 @@ class SearchResponse(BaseModel):
     latency_ms: float = Field(default=0.0, description="Server-side processing time in milliseconds")
     should_rag: bool = Field(default=False, description="Router decision: whether this query should trigger RAG")
     rag_reason: str = Field(default="", description="Human-readable routing reason")
+    rewrite_keywords: str = Field(default="", description="English keywords extracted from a Chinese query, if any")
 
 
 # ---------------------------------------------------------------------------
