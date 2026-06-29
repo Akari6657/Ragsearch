@@ -18,7 +18,7 @@ def test_index_dir():
     import faiss
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="faiss_test_"))
-    dim = 384
+    dim = 1024
 
     # Create random normalized vectors
     rng = np.random.RandomState(42)

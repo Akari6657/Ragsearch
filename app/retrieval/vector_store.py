@@ -1,5 +1,5 @@
 """
-Vector retriever: semantic search via FAISS + BGE-small-en embeddings.
+Vector retriever: semantic search via FAISS + BGE-M3 embeddings.
 
 Loads the FAISS index and ID mapping from disk, encodes the query with the
 same embedding model, and returns SearchResult objects — same interface

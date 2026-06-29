@@ -14,20 +14,20 @@ def model():
 
 class TestEmbeddingModel:
     def test_dim(self, model):
-        assert model.dim == 384
+        assert model.dim == 1024
 
     def test_encode_empty(self, model):
         vecs = model.encode([], show_progress=False)
-        assert vecs.shape == (0, 384)
+        assert vecs.shape == (0, 1024)
 
     def test_encode_single(self, model):
         vecs = model.encode(["test"], show_progress=False)
-        assert vecs.shape == (1, 384)
+        assert vecs.shape == (1, 1024)
         assert vecs.dtype == np.float32
 
     def test_encode_batch(self, model):
         vecs = model.encode(["a", "b", "c"], show_progress=False)
-        assert vecs.shape == (3, 384)
+        assert vecs.shape == (3, 1024)
 
     def test_normalized(self, model):
         """Vectors should be L2-normalized (norms ≈ 1.0)."""

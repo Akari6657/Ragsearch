@@ -3,7 +3,7 @@ Build a FAISS vector index from chunk texts in the metadata SQLite DB.
 
 Workflow:
 1. Read all chunks from the chunks table
-2. Encode chunk_text with BAAI/bge-small-en-v1.5
+2. Encode chunk_text with BAAI/bge-m3
 3. Build a FAISS IndexFlatIP (inner product = cosine on L2-normalized vectors)
 4. Save the index + an ID mapping file (faiss_id → chunk_id → paper_id)
 
@@ -69,7 +69,7 @@ def build_faiss(db_path: Path, output_dir: Path) -> tuple[int, int]:
 
     # — 2. Encode ————————————————————————————————————————————————————————
     model = EmbeddingModel()
-    vectors = model.encode(texts)  # shape (N, dim), already L2-normalized
+    vectors = model.encode(texts, batch_size=4)  # small batch for GPU memory
 
     # — 3. Build FAISS index —————————————————————————————————————————————
     import faiss

@@ -36,7 +36,7 @@ def search_papers(request: SearchRequest) -> SearchResponse:
 
     Modes:
     - lexical: SQLite FTS5 BM25 keyword search
-    - vector:  FAISS cosine similarity over BGE-small-en embeddings
+    - vector:  FAISS cosine similarity over BGE-M3 embeddings
     - hybrid:  weighted combination (alpha controls lexical vs vector weight)
 
     When include_overview=True, the router decides whether to generate

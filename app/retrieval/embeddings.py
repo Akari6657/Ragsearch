@@ -1,8 +1,8 @@
 """
 Embedding pipeline: encode chunk texts into dense vectors.
 
-Uses BAAI/bge-small-en-v1.5 — 384-dimensional embeddings, local CPU inference,
-good quality on academic text (MTEB retrieval benchmark).
+Uses BAAI/bge-m3 — 1024-dimensional embeddings with native multi-language
+support and 8192 token input limit. Much better for academic long-text retrieval.
 
 Vectors are L2-normalized so FAISS IndexFlatIP (inner product) gives
 cosine similarity.
@@ -11,7 +11,7 @@ Usage:
     from app.retrieval.embeddings import EmbeddingModel
 
     model = EmbeddingModel()
-    vectors = model.encode(["text 1", "text 2", ...])  # shape (N, 384)
+    vectors = model.encode(["text 1", "text 2", ...])  # shape (N, 1024)
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
 # Default model
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL_NAME = "BAAI/bge-small-en-v1.5"
-"""Default embedding model. 384 dims, ~130 MB on first download."""
+DEFAULT_MODEL_NAME = "BAAI/bge-m3"
+"""Default embedding model. 1024 dims, ~2.2 GB on first download. 8192 token max input."""
 
 # ---------------------------------------------------------------------------
 # Embedding model wrapper
