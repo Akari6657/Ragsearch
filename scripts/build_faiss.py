@@ -4,7 +4,7 @@ Build a FAISS vector index from chunk texts in the metadata SQLite DB.
 Workflow:
 1. Read all chunks from the chunks table
 2. Encode chunk_text with BAAI/bge-m3
-3. Build a FAISS IndexFlatIP (inner product = cosine on L2-normalized vectors)
+3. Build a FAISS IndexIVFFlat (IVF clustering for fast approximate search)
 4. Save the index + an ID mapping file (faiss_id → chunk_id → paper_id)
 
 Usage:
@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import sqlite3
 import sys
 from pathlib import Path
@@ -71,14 +72,25 @@ def build_faiss(db_path: Path, output_dir: Path) -> tuple[int, int]:
     model = EmbeddingModel()
     vectors = model.encode(texts, batch_size=4)  # small batch for GPU memory
 
-    # — 3. Build FAISS index —————————————————————————————————————————————
+    # — 3. Build FAISS index (IVF) ————————————————————————————————————
     import faiss
 
     dim = vectors.shape[1]
-    index = faiss.IndexFlatIP(dim)  # inner product on normalized vectors = cosine
+    n_vectors = vectors.shape[0]
+
+    # nlist = 4 × sqrt(N) is the standard heuristic for IVF clustering
+    nlist = max(1, int(4 * math.sqrt(n_vectors)))
+    nlist = min(nlist, 65536)  # FAISS upper bound for nlist
+
+    quantizer = faiss.IndexFlatIP(dim)  # exact IP for coarse assignment
+    index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+
+    logger.info("Training IVF index (nlist=%d, vectors=%d)...", nlist, n_vectors)
+    index.train(vectors)
     index.add(vectors)
 
-    logger.info("FAISS index built: %d vectors, dim=%d", index.ntotal, dim)
+    logger.info("FAISS IndexIVFFlat built: %d vectors, dim=%d, nlist=%d",
+                index.ntotal, dim, nlist)
 
     # — 4. Save index ————————————————————————————————————————————————————
     output_dir.mkdir(parents=True, exist_ok=True)

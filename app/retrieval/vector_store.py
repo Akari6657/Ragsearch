@@ -63,6 +63,11 @@ def _load_index(index_dir: Path):
     logger.info("Loading FAISS index from %s ...", index_path)
     _index = faiss.read_index(str(index_path))
 
+    # IVF: set nprobe (number of clusters to search). Higher = more accurate but slower.
+    if hasattr(_index, "nprobe") and hasattr(_index, "nlist"):
+        _index.nprobe = min(_index.nlist // 4, 64)
+        logger.info("IVF nlist=%d, nprobe=%d", _index.nlist, _index.nprobe)
+
     with open(id_map_path, "r", encoding="utf-8") as f:
         _id_map = json.load(f)
 
