@@ -70,7 +70,7 @@ def build_faiss(db_path: Path, output_dir: Path) -> tuple[int, int]:
 
     # — 2. Encode ————————————————————————————————————————————————————————
     model = EmbeddingModel()
-    vectors = model.encode(texts, batch_size=4)  # small batch for GPU memory
+    vectors = model.encode(texts, batch_size=16)
 
     # — 3. Build FAISS index (IVF) ————————————————————————————————————
     import faiss
