@@ -91,6 +91,17 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             logger.info("Query enriched: '%s' → '%s', +%d extra results",
                         request.query[:60], keywords[:60], len(kw_results))
 
+    # — Dedup: keep highest-score chunk per paper_id ———————————————————
+    seen: dict[str, int] = {}  # paper_id → index in results
+    deduped: list = []
+    for r in results:
+        if r.paper_id not in seen:
+            seen[r.paper_id] = len(deduped)
+            deduped.append(r)
+        elif r.score > deduped[seen[r.paper_id]].score:
+            deduped[seen[r.paper_id]] = r
+    results = deduped
+
     # — Snippet: always use abstract preview (chunk_text contains title, which
     #   would duplicate the title already shown in the result card). FTS5
     #   snippet from chunk_text is discarded.

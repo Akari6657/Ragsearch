@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     chunk_text TEXT    NOT NULL,
     chunk_type TEXT    NOT NULL DEFAULT 'metadata',
     token_count INTEGER NOT NULL DEFAULT 0,
+    position   INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (paper_id) REFERENCES papers (paper_id)
 );
 
@@ -72,9 +73,9 @@ VALUES
 
 INSERT_CHUNK = """
 INSERT OR REPLACE INTO chunks
-    (chunk_id, paper_id, chunk_text, chunk_type, token_count)
+    (chunk_id, paper_id, chunk_text, chunk_type, token_count, position)
 VALUES
-    (:chunk_id, :paper_id, :chunk_text, :chunk_type, :token_count)
+    (:chunk_id, :paper_id, :chunk_text, :chunk_type, :token_count, :position)
 """
 
 # ---------------------------------------------------------------------------
@@ -103,7 +104,7 @@ def build_db(input_path: Path, db_path: Path) -> tuple[int, int]:
             if paper is None:
                 continue
 
-            chunk = chunk_paper(paper)
+            chunks = chunk_paper(paper)  # now returns list[dict]
 
             # Serialize list fields to JSON for SQLite storage
             paper_row = {
@@ -114,10 +115,12 @@ def build_db(input_path: Path, db_path: Path) -> tuple[int, int]:
             }
 
             conn.execute(INSERT_PAPER, paper_row)
-            conn.execute(INSERT_CHUNK, chunk)
+            for ch in chunks:
+                ch["position"] = ch.get("position", 0)
+                conn.execute(INSERT_CHUNK, ch)
 
             num_papers += 1
-            num_chunks += 1
+            num_chunks += len(chunks)
 
             if num_papers % 100 == 0:
                 logger.info("  Inserted %d papers/chunks...", num_papers)
