@@ -91,8 +91,11 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             logger.info("Query enriched: '%s' → '%s', +%d extra results",
                         request.query[:60], keywords[:60], len(kw_results))
 
-    # — Dedup: keep highest-score chunk per paper_id ———————————————————
-    seen: dict[str, int] = {}  # paper_id → index in results
+    # — Save chunk-level results for RAG (before paper-level dedup) ——
+    rag_candidates = list(results)
+
+    # — Dedup: keep highest-score chunk per paper_id (for display) ————
+    seen: dict[str, int] = {}
     deduped: list = []
     for r in results:
         if r.paper_id not in seen:
@@ -102,23 +105,22 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             deduped[seen[r.paper_id]] = r
     results = deduped
 
-    # — Snippet: always use abstract preview (chunk_text contains title, which
-    #   would duplicate the title already shown in the result card). FTS5
-    #   snippet from chunk_text is discarded.
+    # — Snippet: always use abstract preview ——————————————————————————
     for r in results:
         r.snippet = r.abstract[:300] if r.abstract else ""
 
-    # — Router (always run, even when include_overview=False) ———————————
+    # — Router (always run) ———————————————————————————————————————————
     router_result = route_query(request.query)
 
-    # — AI Overview (optional, reuses search results — no separate retrieval) —
+    # — AI Overview (uses chunk-level results — NOT deduped — for richer evidence) —
     ai_overview = None
     if request.include_overview and router_result.should_rag:
         logger.info("AI Overview triggered: %s", router_result.reason)
         n_chunks = min(request.top_k, 8)
+        # Use pre-dedup results so LLM gets multiple chunks from the same paper
         ai_overview = answer_question(
             question=request.query,
-            pre_retrieved=results[:n_chunks],
+            pre_retrieved=rag_candidates[:n_chunks],
             top_k=n_chunks,
             retrieval_mode=request.mode,
             alpha=request.alpha,
