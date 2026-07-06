@@ -2,7 +2,15 @@
 
 Academic Search + Citation-grounded RAG + AI Overview
 
-Local-first academic paper search and question answering. 1,300 CS papers from arXiv (2024-2026), hybrid retrieval (BM25 + FAISS), and DeepSeek-powered RAG with verifiable citations.
+Local-first academic paper search and question answering with SQLite FTS5,
+FAISS vector retrieval, and citation-aware RAG.
+
+## Current Status
+
+- Lexical search is ready with SQLite FTS5 over local chunks.
+- Vector and hybrid search require a built FAISS index (`data/indexes/faiss/index.faiss` + `id_map.json`).
+- `/ask` and AI Overview are implemented; without `LLM_API_KEY`, the app uses a mock LLM provider for local development.
+- Local generated data and indexes are intentionally not committed.
 
 ---
 
@@ -13,19 +21,19 @@ Local-first academic paper search and question answering. 1,300 CS papers from a
 cd Citequest
 python3 -m venv .venv
 source .venv/bin/activate
-pip install pydantic fastapi uvicorn sentence-transformers faiss-cpu httpx python-dotenv arxiv
+pip install -e ".[all]"
 
 # 2. Configure LLM (optional — works without for search-only)
 cp .env.example .env
 # Edit .env with your DeepSeek API key
 
-# 3. Download data (arXiv CS papers, 2024-2026)
-python scripts/download_arxiv.py --size 1000
+# 3. Download a small arXiv CS sample
+python scripts/download_arxiv.py --size 1000 --output data/raw/arxiv_cs_sample.jsonl
 
 # 4. Build indexes
-python scripts/build_metadata_db.py --input data/raw/arxiv_cs_2024.jsonl
+python scripts/build_metadata_db.py --input data/raw/arxiv_cs_sample.jsonl
 python scripts/build_fts.py
-python scripts/build_faiss.py
+python scripts/build_faiss.py  # required for vector / hybrid search
 
 # 5. Run
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -97,17 +105,17 @@ User Query
 |---|---|
 | API | FastAPI + Pydantic v2 |
 | Lexical search | SQLite FTS5 + BM25 |
-| Vector search | FAISS IndexFlatIP + BGE-small-en (384d) |
+| Vector search | FAISS IVF + BGE-M3 embeddings (1024d) |
 | LLM | DeepSeek V4 Flash (OpenAI-compatible) |
 | Frontend | Single-page HTML (no framework) |
-| Data | arXiv API, 1,300 CS papers |
+| Data | arXiv metadata sample; optional peS2o full-text experiment |
 
 ### Key Design Decisions
 
 - No stemming or stop-word removal (BM25 IDF handles it naturally)
-- Chunk text = Title + Abstract only (metadata for filtering, text for embedding)
+- Chunk text = Title + Abstract, plus body chunks when full text is available
 - OR search + phrase boost (user can use `"..."` for exact phrase matching)
-- FAISS exact search (IndexFlatIP — 1,300 vectors is too small for approximate)
+- FAISS is local and file-based; generated indexes are not committed
 - AI Overview on demand, not every search (router decides)
 - Citations validated but answer never rejected (frontend controls display)
 
@@ -139,7 +147,7 @@ tests/                     90 tests
 ## Tests
 
 ```bash
-PYTHONPATH=$(pwd) pytest tests/ -v
+pytest tests/ -v
 ```
 
 ---

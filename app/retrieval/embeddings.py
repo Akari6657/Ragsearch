@@ -17,7 +17,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
@@ -25,6 +25,24 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
+
+
+class EmbeddingBackend(Protocol):
+    """Small protocol shared by SentenceTransformer and test doubles."""
+
+    def get_embedding_dimension(self) -> int:
+        ...
+
+    def encode(
+        self,
+        texts: list[str],
+        *,
+        batch_size: int = 64,
+        show_progress_bar: bool = True,
+        normalize_embeddings: bool = True,
+        convert_to_numpy: bool = True,
+    ) -> np.ndarray:
+        ...
 
 # ---------------------------------------------------------------------------
 # Default model
@@ -44,12 +62,12 @@ class EmbeddingModel:
     The model is loaded once and cached.  Call encode() for batched inference.
     """
 
-    def __init__(self, model_name: str = DEFAULT_MODEL_NAME):
+    def __init__(self, model_name: str = DEFAULT_MODEL_NAME, model: EmbeddingBackend | None = None):
         self._model_name = model_name
-        self._model: SentenceTransformer | None = None
+        self._model: EmbeddingBackend | None = model
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self) -> EmbeddingBackend:
         if self._model is None:
             logger.info("Loading embedding model: %s ...", self._model_name)
             # Lazy import — sentence-transformers is heavy
@@ -89,4 +107,4 @@ class EmbeddingModel:
         )
 
         logger.info("Encoded %d vectors, shape=%s", len(texts), vectors.shape)
-        return vectors
+        return np.asarray(vectors, dtype=np.float32)

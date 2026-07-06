@@ -12,6 +12,16 @@ import pytest
 from app.retrieval.vector_store import search_vector
 
 
+class FakeEmbeddingModel:
+    """Small deterministic query encoder used by vector-store unit tests."""
+
+    def encode(self, texts, *, show_progress=False, **kwargs):
+        vectors = np.zeros((len(texts), 1024), dtype=np.float32)
+        for i, text in enumerate(texts):
+            vectors[i, sum(ord(ch) for ch in text) % 1024] = 1.0
+        return vectors
+
+
 @pytest.fixture
 def test_index_dir():
     """Build a tiny FAISS index with 5 vectors for testing."""
@@ -77,12 +87,13 @@ def test_db_path(test_index_dir):
 
 class TestVectorSearch:
     @pytest.fixture(autouse=True)
-    def _reset_globals(self):
+    def _reset_globals(self, monkeypatch):
         """Reset vector_store module globals before each test."""
         import app.retrieval.vector_store as vs
         vs._index = None
         vs._id_map = []
         vs._model = None
+        monkeypatch.setattr(vs, "EmbeddingModel", FakeEmbeddingModel)
 
     def test_returns_results(self, test_db_path, test_index_dir):
         results = search_vector(
