@@ -10,6 +10,7 @@ FAISS vector retrieval, and citation-aware RAG.
 - Lexical search is ready with SQLite FTS5 over local chunks.
 - Vector and hybrid search require a built FAISS index (`data/indexes/faiss/index.faiss` + `id_map.json`).
 - `/search` returns `503 INDEX_NOT_READY` for `mode=vector` or `mode=hybrid` until FAISS is built.
+- Runtime index paths can be overridden with `CITEQUEST_DB_PATH` and `CITEQUEST_FAISS_DIR`.
 - `/ask` and AI Overview are implemented; without `LLM_API_KEY`, the app uses a mock LLM provider for local development.
 - Local generated data and indexes are intentionally not committed.
 
@@ -28,19 +29,34 @@ pip install -e ".[all]"
 cp .env.example .env
 # Edit .env with your DeepSeek API key
 
-# 3. Download a small arXiv CS sample
-python scripts/download_arxiv.py --size 1000 --output data/raw/arxiv_cs_sample.jsonl
+# 3. Create a small demo corpus from an existing local peS2o full-text corpus
+python scripts/sample_corpus.py \
+  --input data/raw/peS2o_cs_fulltext_50000.jsonl \
+  --output data/raw/demo_peS2o_1000.jsonl \
+  --size 1000 \
+  --seed 42
 
-# 4. Build indexes
-python scripts/build_metadata_db.py --input data/raw/arxiv_cs_sample.jsonl
-python scripts/build_fts.py
-python scripts/build_faiss.py  # required for vector / hybrid search
+# 4. Build demo indexes
+python scripts/build_metadata_db.py \
+  --input data/raw/demo_peS2o_1000.jsonl \
+  --db data/indexes/demo/metadata.sqlite
+python scripts/build_fts.py --db data/indexes/demo/metadata.sqlite
+python scripts/build_faiss.py \
+  --db data/indexes/demo/metadata.sqlite \
+  --output-dir data/indexes/demo/faiss
 
-# 5. Run
+# 5. Run against the demo indexes
+CITEQUEST_DB_PATH=data/indexes/demo/metadata.sqlite \
+CITEQUEST_FAISS_DIR=data/indexes/demo/faiss \
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 # 6. Open http://127.0.0.1:8000
 ```
+
+If you do not already have a local peS2o corpus, use
+`scripts/download_fulltext.py` or `scripts/download_arxiv.py` to create one
+first. The larger 50k-paper peS2o corpus is treated as a benchmark dataset, not
+the default quickstart path.
 
 ---
 
@@ -136,11 +152,11 @@ app/
   main.py                  FastAPI app
 
 scripts/                   download_arxiv, build_metadata_db,
-                           build_fts, build_faiss
+                           build_fts, build_faiss, sample_corpus
 
 data/                      raw/ (JSONL), indexes/ (SQLite, FAISS)
 frontend/index.html        Search UI
-tests/                     90 tests
+tests/                     110+ tests
 ```
 
 ---

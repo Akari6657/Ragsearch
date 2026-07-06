@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from app.core.config import get_db_path, get_faiss_dir
 from app.core.schemas import SearchRequest, SearchResponse
 from app.rag.router import route_query
 from app.rag.answer import answer_question
@@ -24,18 +25,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-DEFAULT_DB_PATH = Path("data/indexes/metadata.sqlite")
-DEFAULT_INDEX_DIR = Path("data/indexes/faiss")
-
 SUPPORTED_MODES = {"lexical", "vector", "hybrid"}
 FAISS_REQUIRED_MODES = {"vector", "hybrid"}
-INDEX_NOT_READY_DETAIL = {
-    "error_code": "INDEX_NOT_READY",
-    "message": (
-        "FAISS index is not ready. Run `python scripts/build_faiss.py` "
-        "to create data/indexes/faiss/index.faiss and id_map.json."
-    ),
-}
+
+
+def _index_not_ready_detail(index_dir: Path) -> dict[str, str]:
+    return {
+        "error_code": "INDEX_NOT_READY",
+        "message": (
+            "FAISS index is not ready. Run `python scripts/build_faiss.py` "
+            f"to create {index_dir / 'index.faiss'} and {index_dir / 'id_map.json'}."
+        ),
+    }
 
 
 def _faiss_ready(index_dir: Path) -> bool:
@@ -46,7 +47,7 @@ def _faiss_ready(index_dir: Path) -> bool:
 def _require_faiss_for_mode(mode: str, index_dir: Path) -> None:
     """Reject vector/hybrid search when the local FAISS artifacts are missing."""
     if mode in FAISS_REQUIRED_MODES and not _faiss_ready(index_dir):
-        raise HTTPException(status_code=503, detail=INDEX_NOT_READY_DETAIL)
+        raise HTTPException(status_code=503, detail=_index_not_ready_detail(index_dir))
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -62,6 +63,8 @@ def search_papers(request: SearchRequest) -> SearchResponse:
     an AI Overview (RAG answer) alongside the search results.
     """
     start = time.perf_counter()
+    db_path = get_db_path()
+    index_dir = get_faiss_dir()
 
     # — mode guard ——————————————————————————————————————————————————————
     if request.mode not in SUPPORTED_MODES:
@@ -69,29 +72,29 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             status_code=400,
             detail=f"Unknown mode '{request.mode}'. Supported: {', '.join(sorted(SUPPORTED_MODES))}.",
         )
-    _require_faiss_for_mode(request.mode, DEFAULT_INDEX_DIR)
+    _require_faiss_for_mode(request.mode, index_dir)
 
     # — search ——————————————————————————————————————————————————————————
     if request.mode == "lexical":
         results = search_lexical(
             query=request.query,
             top_k=request.top_k,
-            db_path=DEFAULT_DB_PATH,
+            db_path=db_path,
         )
     elif request.mode == "vector":
         results = search_vector(
             query=request.query,
             top_k=request.top_k,
-            db_path=DEFAULT_DB_PATH,
-            index_dir=DEFAULT_INDEX_DIR,
+            db_path=db_path,
+            index_dir=index_dir,
         )
     else:  # hybrid
         results = search_hybrid(
             query=request.query,
             top_k=request.top_k,
             alpha=request.alpha,
-            db_path=DEFAULT_DB_PATH,
-            index_dir=DEFAULT_INDEX_DIR,
+            db_path=db_path,
+            index_dir=index_dir,
         )
 
     # — Query enrichment: Chinese → extract English keywords → extra lexical search —
@@ -101,7 +104,7 @@ def search_papers(request: SearchRequest) -> SearchResponse:
         if keywords and keywords != request.query:
             rewrite_keywords = keywords
             kw_results = search_lexical(
-                keywords, top_k=request.top_k, db_path=DEFAULT_DB_PATH,
+                keywords, top_k=request.top_k, db_path=db_path,
             )
             seen = {r.chunk_id for r in results}
             for r in kw_results:
@@ -144,8 +147,8 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             top_k=n_chunks,
             retrieval_mode=request.mode,
             alpha=request.alpha,
-            db_path=DEFAULT_DB_PATH,
-            index_dir=DEFAULT_INDEX_DIR,
+            db_path=db_path,
+            index_dir=index_dir,
         )
     elif request.include_overview:
         logger.info("AI Overview skipped: %s", router_result.reason)

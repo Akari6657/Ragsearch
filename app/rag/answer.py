@@ -19,6 +19,7 @@ import logging
 import time
 from pathlib import Path
 
+from app.core.config import get_db_path, get_faiss_dir
 from app.core.schemas import AskRequest, AskResponse, CitationInfo, SearchResult
 from app.rag.citation import verify_citations
 from app.rag.context_builder import build_evidence
@@ -29,18 +30,14 @@ from app.retrieval.lexical import search_lexical
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB = Path("data/indexes/metadata.sqlite")
-DEFAULT_INDEX_DIR = Path("data/indexes/faiss")
-
-
 def answer_question(
     question: str,
     pre_retrieved: list | None = None,
     top_k: int = 8,
     retrieval_mode: str = "hybrid",
     alpha: float = 0.3,
-    db_path: str | Path = DEFAULT_DB,
-    index_dir: str | Path = DEFAULT_INDEX_DIR,
+    db_path: str | Path | None = None,
+    index_dir: str | Path | None = None,
 ) -> AskResponse:
     """Answer a question with citation-grounded RAG.
 
@@ -63,8 +60,8 @@ def answer_question(
         AskResponse with answer text, citations, validity, and latency.
     """
     t0 = time.perf_counter()
-    db_path = Path(db_path)
-    index_dir = Path(index_dir)
+    db_path = Path(db_path) if db_path is not None else get_db_path()
+    index_dir = Path(index_dir) if index_dir is not None else get_faiss_dir()
 
     # — 1. Evidence: reuse pre-retrieved or do internal retrieval ———————
     if pre_retrieved is not None:
@@ -188,8 +185,8 @@ async def answer_question_stream(
     top_k: int = 8,
     retrieval_mode: str = "hybrid",
     alpha: float = 0.3,
-    db_path: str | Path = DEFAULT_DB,
-    index_dir: str | Path = DEFAULT_INDEX_DIR,
+    db_path: str | Path | None = None,
+    index_dir: str | Path | None = None,
 ):
     """Async generator that yields SSE events as the RAG pipeline progresses.
 
@@ -204,8 +201,8 @@ async def answer_question_stream(
     the event loop stays responsive.
     """
     t0 = time.perf_counter()
-    db_path = Path(db_path)
-    index_dir = Path(index_dir)
+    db_path = Path(db_path) if db_path is not None else get_db_path()
+    index_dir = Path(index_dir) if index_dir is not None else get_faiss_dir()
 
     # ---- Phase 1: Retrieving / Organizing ----------------------------------
     if pre_retrieved is not None:

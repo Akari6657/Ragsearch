@@ -17,7 +17,7 @@ def test_faiss_ready_requires_index_and_id_map(tmp_path):
 
 
 def test_vector_search_requires_faiss(monkeypatch, tmp_path):
-    monkeypatch.setattr(routes_search, "DEFAULT_INDEX_DIR", tmp_path)
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
 
     request = SearchRequest(query="GAN image generation", mode="vector", top_k=3)
 
@@ -31,7 +31,7 @@ def test_vector_search_requires_faiss(monkeypatch, tmp_path):
 
 
 def test_hybrid_search_requires_faiss(monkeypatch, tmp_path):
-    monkeypatch.setattr(routes_search, "DEFAULT_INDEX_DIR", tmp_path)
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
 
     request = SearchRequest(query="GAN image generation", mode="hybrid", top_k=3)
 
@@ -45,7 +45,7 @@ def test_hybrid_search_requires_faiss(monkeypatch, tmp_path):
 
 
 def test_lexical_search_does_not_require_faiss(monkeypatch, tmp_path):
-    monkeypatch.setattr(routes_search, "DEFAULT_INDEX_DIR", tmp_path)
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
     monkeypatch.setattr(routes_search, "search_lexical", lambda *args, **kwargs: [])
 
     request = SearchRequest(query="GAN image generation", mode="lexical", top_k=3)

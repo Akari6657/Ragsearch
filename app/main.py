@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes_search import router as search_router
 from app.api.routes_ask import router as ask_router
+from app.core.config import get_db_path, get_faiss_dir
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -51,12 +52,8 @@ logger = logging.getLogger(__name__)
 # Health check
 # ---------------------------------------------------------------------------
 
-DEFAULT_DB_PATH = Path("data/indexes/metadata.sqlite")
-
-
-def _check_indexes(db_path: Path) -> dict[str, bool]:
+def _check_indexes(db_path: Path, faiss_dir: Path) -> dict[str, bool]:
     """Report which indexes are available."""
-    faiss_dir = db_path.parent / "faiss"
     faiss_index = faiss_dir / "index.faiss"
     faiss_id_map = faiss_dir / "id_map.json"
 
@@ -89,7 +86,9 @@ def _check_indexes(db_path: Path) -> dict[str, bool]:
 @app.get("/health")
 def health():
     """Return service status and index availability."""
-    indexes = _check_indexes(DEFAULT_DB_PATH)
+    db_path = get_db_path()
+    faiss_dir = get_faiss_dir()
+    indexes = _check_indexes(db_path, faiss_dir)
     capabilities = {
         "lexical_search": indexes["metadata_db"] and indexes["fts5"],
         "vector_search": indexes["metadata_db"] and indexes["faiss"],
@@ -107,6 +106,10 @@ def health():
     return {
         "status": status,
         "version": app.version,
+        "paths": {
+            "metadata_db": str(db_path),
+            "faiss_dir": str(faiss_dir),
+        },
         "indexes": indexes,
         "capabilities": capabilities,
     }
