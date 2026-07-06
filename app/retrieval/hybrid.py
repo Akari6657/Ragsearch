@@ -38,14 +38,8 @@ DEFAULT_INDEX_DIR = Path("data/indexes/faiss")
 # ---------------------------------------------------------------------------
 
 
-def _minmax_normalize(scores: list[float]) -> list[float]:
-    """Normalize scores to [0, 1] range using min-max scaling.
-
-    For BM25 (negative scores, lower = better), this will map the
-    best (most negative) score to 1.0 and the worst to 0.0.
-
-    If all scores are identical, returns 0.5 for everything.
-    """
+def _normalize_higher_is_better(scores: list[float]) -> list[float]:
+    """Normalize scores where larger values are more relevant."""
     if not scores:
         return []
 
@@ -55,6 +49,24 @@ def _minmax_normalize(scores: list[float]) -> list[float]:
         return [0.5] * len(scores)
 
     return [(s - mn) / (mx - mn) for s in scores]
+
+
+def _normalize_lower_is_better(scores: list[float]) -> list[float]:
+    """Normalize scores where smaller values are more relevant.
+
+    SQLite FTS5 bm25() returns lower scores for better matches, often as
+    negative values.  This maps the smallest score to 1.0 and the largest
+    score to 0.0 so it can be fused with higher-is-better vector scores.
+    """
+    if not scores:
+        return []
+
+    mn = min(scores)
+    mx = max(scores)
+    if mx == mn:
+        return [0.5] * len(scores)
+
+    return [(mx - s) / (mx - mn) for s in scores]
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +112,8 @@ def search_hybrid(
     lex_scores = [r.score for r in lexical_results]
     vec_scores = [r.score for r in vector_results]
 
-    lex_norm = _minmax_normalize(lex_scores)
-    vec_norm = _minmax_normalize(vec_scores)
+    lex_norm = _normalize_lower_is_better(lex_scores)
+    vec_norm = _normalize_higher_is_better(vec_scores)
 
     # — Merge by chunk_id ——————————————————————————————————————————————
     merged: dict[str, dict] = {}  # chunk_id → {lex_norm, vec_norm, result}

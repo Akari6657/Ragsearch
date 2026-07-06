@@ -28,6 +28,25 @@ DEFAULT_DB_PATH = Path("data/indexes/metadata.sqlite")
 DEFAULT_INDEX_DIR = Path("data/indexes/faiss")
 
 SUPPORTED_MODES = {"lexical", "vector", "hybrid"}
+FAISS_REQUIRED_MODES = {"vector", "hybrid"}
+INDEX_NOT_READY_DETAIL = {
+    "error_code": "INDEX_NOT_READY",
+    "message": (
+        "FAISS index is not ready. Run `python scripts/build_faiss.py` "
+        "to create data/indexes/faiss/index.faiss and id_map.json."
+    ),
+}
+
+
+def _faiss_ready(index_dir: Path) -> bool:
+    """Return True only when both FAISS files required for lookup exist."""
+    return (index_dir / "index.faiss").exists() and (index_dir / "id_map.json").exists()
+
+
+def _require_faiss_for_mode(mode: str, index_dir: Path) -> None:
+    """Reject vector/hybrid search when the local FAISS artifacts are missing."""
+    if mode in FAISS_REQUIRED_MODES and not _faiss_ready(index_dir):
+        raise HTTPException(status_code=503, detail=INDEX_NOT_READY_DETAIL)
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -50,6 +69,7 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             status_code=400,
             detail=f"Unknown mode '{request.mode}'. Supported: {', '.join(sorted(SUPPORTED_MODES))}.",
         )
+    _require_faiss_for_mode(request.mode, DEFAULT_INDEX_DIR)
 
     # — search ——————————————————————————————————————————————————————————
     if request.mode == "lexical":

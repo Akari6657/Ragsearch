@@ -9,6 +9,7 @@ FAISS vector retrieval, and citation-aware RAG.
 
 - Lexical search is ready with SQLite FTS5 over local chunks.
 - Vector and hybrid search require a built FAISS index (`data/indexes/faiss/index.faiss` + `id_map.json`).
+- `/search` returns `503 INDEX_NOT_READY` for `mode=vector` or `mode=hybrid` until FAISS is built.
 - `/ask` and AI Overview are implemented; without `LLM_API_KEY`, the app uses a mock LLM provider for local development.
 - Local generated data and indexes are intentionally not committed.
 
