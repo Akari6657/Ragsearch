@@ -66,6 +66,23 @@ For the portfolio-scale 10k demo, use the same pipeline with
 `--size 10000`, `data/raw/demo_peS2o_10000.jsonl`, and an isolated output path
 such as `data/indexes/demo10k/`.
 
+After that FAISS build completes, run the operational acceptance suite:
+
+```bash
+python scripts/run_demo_smoke.py
+```
+
+The command verifies SQLite/FTS5/FAISS counts, the exact FAISS-to-SQLite ID
+mapping, build metadata and source-corpus provenance. It then warms and times
+BM25, Dense, and Hybrid retrieval on fixed representative queries and exercises
+the FastAPI search/RAG handlers with a forced mock LLM. It writes local reports
+to `reports/demo10k_smoke.json` and `reports/demo10k_smoke.md`; these generated
+demo reports are ignored by Git.
+
+This 10k report is an operational smoke test, not a relevance benchmark. It
+does not calculate or claim HitRate, Recall, MRR, or nDCG. Those comparisons
+remain reserved for the frozen 50k arXiv CS Retrieval Benchmark v1.
+
 If you do not already have a local peS2o corpus, use
 `scripts/download_fulltext.py` or `scripts/download_arxiv.py` to create one
 first. peS2o is retained as an optional full-text stress test and is not
@@ -166,12 +183,12 @@ app/
   eval/                    retrieval_eval, rag_eval
   main.py                  FastAPI app
 
-scripts/                   download_arxiv, build_metadata_db,
-                           build_fts, build_faiss, sample_corpus
+scripts/                   download_arxiv, build_metadata_db, build_fts,
+                           build_faiss, run_demo_smoke, sample_corpus
 
 data/                      raw/ (JSONL), indexes/ (SQLite, FAISS)
 frontend/index.html        Search UI
-tests/                     110+ tests
+tests/                     Unit and end-to-end smoke tests
 ```
 
 ---

@@ -35,6 +35,16 @@ computer-science-filtered data.
 Runs on 5,000 or 10,000 papers are development runs. They must be labelled
 `smoke_or_development`, never Benchmark v1.
 
+The separate 10k peS2o demo can be checked after its FAISS build with:
+
+```bash
+python scripts/run_demo_smoke.py
+```
+
+That command validates artifact consistency, warmed retrieval latency, and the
+search/citation route handlers. Its generated report is labelled `demo_smoke`,
+contains no relevance metrics, and is not an input to Benchmark v1.
+
 ## Frozen Evaluation Set
 
 `scripts/build_retrieval_eval.py` constructs
