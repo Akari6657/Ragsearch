@@ -28,6 +28,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from app.eval.runtime_info import collect_accelerator_info
 from app.retrieval.hybrid import search_hybrid
 from app.retrieval.lexical import search_lexical
 from app.retrieval.vector_store import search_vector
@@ -804,6 +805,7 @@ def build_benchmark_manifest(
             "python": platform.python_version(),
             "platform": platform.platform(),
             "processor": platform.processor() or None,
+            "accelerator": collect_accelerator_info(),
             "numpy": np.__version__,
             "faiss": getattr(faiss, "__version__", None),
         },

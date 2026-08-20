@@ -141,6 +141,7 @@ class TestMockLLM:
         llm = MockLLMProvider()
         r = llm.generate(system="sys", user="question")
         assert len(r.text) > 0
+        assert "[1]" in r.text
 
 
 class TestCreateProvider:

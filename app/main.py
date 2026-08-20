@@ -31,11 +31,6 @@ app = FastAPI(
 app.include_router(search_router)
 app.include_router(ask_router)
 
-# Serve frontend static files
-frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-if frontend_dir.is_dir():
-    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
-
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -113,3 +108,9 @@ def health():
         "indexes": indexes,
         "capabilities": capabilities,
     }
+
+
+# Keep the catch-all static mount last so it cannot shadow API routes.
+frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+if frontend_dir.is_dir():
+    app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

@@ -45,6 +45,11 @@ That command validates artifact consistency, warmed retrieval latency, and the
 search/citation route handlers. Its generated report is labelled `demo_smoke`,
 contains no relevance metrics, and is not an input to Benchmark v1.
 
+`python scripts/run_http_smoke.py` is the complementary deployment smoke. It
+starts a temporary Uvicorn process and verifies the same public routes over
+localhost HTTP. Its output is also operational evidence, not retrieval-quality
+evidence.
+
 ## Frozen Evaluation Set
 
 `scripts/build_retrieval_eval.py` constructs

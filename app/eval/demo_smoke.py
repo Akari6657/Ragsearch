@@ -21,6 +21,7 @@ from typing import Any, Callable, Sequence
 from unittest.mock import patch
 
 from app.core.schemas import SearchResult
+from app.eval.runtime_info import collect_accelerator_info
 from app.retrieval.embeddings import DEFAULT_MODEL_NAME
 from app.retrieval.hybrid import search_hybrid
 from app.retrieval.lexical import search_lexical
@@ -843,6 +844,7 @@ def run_demo_smoke(
             "git_dirty": bool(git_status),
             "python": platform.python_version(),
             "platform": platform.platform(),
+            "accelerator": collect_accelerator_info(),
         },
         "artifacts": artifacts,
         "retrieval": retrieval,
@@ -856,6 +858,8 @@ def _markdown_escape(value: Any) -> str:
 
 def render_demo_smoke_markdown(report: dict[str, Any]) -> str:
     """Render a compact, recruiter-readable operational smoke report."""
+    accelerator = report["provenance"].get("accelerator", {})
+    device = accelerator.get("device_name") or "CPU"
     lines = [
         "# CiteQuest 10k Demo Smoke Report",
         "",
@@ -865,6 +869,7 @@ def render_demo_smoke_markdown(report: dict[str, Any]) -> str:
         f"**Created:** `{report['created_at']}`  ",
         f"**Git commit:** `{report['provenance'].get('git_commit') or 'unknown'}`  ",
         f"**Git dirty:** `{report['provenance']['git_dirty']}`",
+        f"**Accelerator:** `{device}`",
         "",
         "## Artifact Integrity",
         "",

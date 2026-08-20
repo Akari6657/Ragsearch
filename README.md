@@ -83,6 +83,17 @@ This 10k report is an operational smoke test, not a relevance benchmark. It
 does not calculate or claim HitRate, Recall, MRR, or nDCG. Those comparisons
 remain reserved for the frozen 50k arXiv CS Retrieval Benchmark v1.
 
+To verify the deployed transport path as well, run the separate real HTTP
+smoke. It starts Uvicorn on localhost, calls the frontend, OpenAPI, health,
+all three search modes, and mock citation RAG over HTTP, then stops the server:
+
+```bash
+python scripts/run_http_smoke.py
+```
+
+Outputs are written to `reports/demo10k_http_smoke.{json,md}`. The server log
+is retained at `reports/demo10k_http_server.log`; no external LLM is called.
+
 If you do not already have a local peS2o corpus, use
 `scripts/download_fulltext.py` or `scripts/download_arxiv.py` to create one
 first. peS2o is retained as an optional full-text stress test and is not
@@ -184,7 +195,8 @@ app/
   main.py                  FastAPI app
 
 scripts/                   download_arxiv, build_metadata_db, build_fts,
-                           build_faiss, run_demo_smoke, sample_corpus
+                           build_faiss, run_demo_smoke, run_http_smoke,
+                           sample_corpus
 
 data/                      raw/ (JSONL), indexes/ (SQLite, FAISS)
 frontend/index.html        Search UI

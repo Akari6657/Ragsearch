@@ -91,7 +91,7 @@ class MockLLMProvider(LLMProvider):
 
     def generate(self, system: str = "", user: str = "", **kwargs) -> LLMResponse:
         answer = self._fixed or (
-            "这是一条模拟回答。在实际运行中，这里将是 LLM 基于证据生成的带引用回答。"
+            "这是一条基于检索证据的模拟回答 [1]。实际运行时将由 LLM 生成回答。"
         )
         return LLMResponse(
             text=answer,
