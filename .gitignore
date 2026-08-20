@@ -10,22 +10,38 @@ __pycache__/
 .vscode/
 .idea/
 
-# Documentation (not tracked)
-docs/
+# Local planning docs; publish the benchmark protocol used by reported results.
+docs/*
+!docs/BENCHMARK_V1.md
 AGENTS.md
 CLAUDE.md
 notes/
 
-# Local data
-data/
+# Local corpora and indexes; the frozen eval set is a versioned benchmark input.
+data/*
+!data/raw/
+!data/processed/
+!data/indexes/
+!data/eval/
+data/raw/*
 !data/raw/.gitkeep
+data/processed/*
 !data/processed/.gitkeep
+data/indexes/*
 !data/indexes/.gitkeep
 !data/indexes/faiss/
+data/indexes/faiss/*
 !data/indexes/faiss/.gitkeep
+data/eval/*
+!data/eval/.gitkeep
+!data/eval/retrieval_v1.jsonl
 
-# Reports (regeneratable)
-reports/
+# Version the official benchmark provenance and measured outputs.
+reports/*
+!reports/.gitkeep
+!reports/benchmark_v1_manifest.json
+!reports/retrieval_baseline_v1.json
+!reports/retrieval_baseline_v1.md
 
 # Model / embedding artifacts
 *.faiss

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -83,14 +84,38 @@ VALUES
 # ---------------------------------------------------------------------------
 
 
-def build_db(input_path: Path, db_path: Path) -> tuple[int, int]:
-    """Run ingestion pipeline and populate SQLite.
+def _sqlite_sidecars(path: Path) -> tuple[Path, Path]:
+    return Path(f"{path}-wal"), Path(f"{path}-shm")
+
+
+def build_db(
+    input_path: Path,
+    db_path: Path,
+    *,
+    overwrite: bool = False,
+) -> tuple[int, int]:
+    """Build a clean SQLite corpus and replace the destination on success.
 
     Returns (num_papers, num_chunks).
     """
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists() and not overwrite:
+        raise FileExistsError(
+            f"Database already exists: {db_path}. Use --overwrite to rebuild it."
+        )
 
-    conn = sqlite3.connect(str(db_path))
+    staging_path = db_path.with_name(f".{db_path.name}.building")
+    staging_files = (staging_path, *_sqlite_sidecars(staging_path))
+    if any(path.exists() for path in staging_files):
+        if not overwrite:
+            raise FileExistsError(
+                f"Incomplete staging database exists: {staging_path}. "
+                "Use --overwrite to discard it."
+            )
+        for path in staging_files:
+            path.unlink(missing_ok=True)
+
+    conn = sqlite3.connect(str(staging_path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(CREATE_TABLES)
@@ -126,9 +151,16 @@ def build_db(input_path: Path, db_path: Path) -> tuple[int, int]:
                 logger.info("  Inserted %d papers/chunks...", num_papers)
 
         conn.commit()
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     finally:
         conn.close()
 
+    for sidecar in _sqlite_sidecars(staging_path):
+        sidecar.unlink(missing_ok=True)
+    if overwrite:
+        for sidecar in _sqlite_sidecars(db_path):
+            sidecar.unlink(missing_ok=True)
+    os.replace(staging_path, db_path)
     return num_papers, num_chunks
 
 
@@ -149,6 +181,11 @@ def main():
         default=str(PROJECT_ROOT / "data" / "indexes" / "metadata.sqlite"),
         help="Output SQLite database (default: data/indexes/metadata.sqlite)",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing database after a clean staging build succeeds",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -160,7 +197,10 @@ def main():
         sys.exit(f"Input file not found: {input_path}")
 
     logger.info("Building metadata DB from %s", input_path.name)
-    np, nc = build_db(input_path, db_path)
+    try:
+        np, nc = build_db(input_path, db_path, overwrite=args.overwrite)
+    except FileExistsError as exc:
+        sys.exit(str(exc))
     logger.info("Done! %d papers, %d chunks → %s", np, nc, db_path)
 
 

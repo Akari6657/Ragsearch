@@ -35,9 +35,11 @@ CS_CATEGORIES = [
     "cs.IR",   # Information Retrieval
     "cs.CR",   # Cryptography and Security
     "cs.DB",   # Databases
+    "cs.DS",   # Data Structures and Algorithms
     "cs.NE",   # Neural and Evolutionary Computing
     "cs.SE",   # Software Engineering
     "cs.RO",   # Robotics
+    "cs.SY",   # Systems and Control
 ]
 
 # Map arXiv categories to concept labels
@@ -147,26 +149,43 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.size <= 0:
+        parser.error("--size must be positive")
+    if args.min_year <= 0:
+        parser.error("--min-year must be positive")
+
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     categories = [c.strip() for c in args.categories.split(",")]
+    if not all(categories):
+        parser.error("--categories must contain non-empty category names")
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load existing papers for dedup
+    # Load existing papers for dedup and resumable target-total semantics.
     existing_ids = set()
     if output_path.exists():
         with open(output_path, "r", encoding="utf-8") as f:
             for line in f:
                 try:
                     rec = json.loads(line.strip())
-                    existing_ids.add(rec.get("paper_id", ""))
+                    paper_id = rec.get("paper_id")
+                    if isinstance(paper_id, str) and paper_id:
+                        existing_ids.add(paper_id)
                 except json.JSONDecodeError:
                     pass
         logger.info("Existing papers in output: %d", len(existing_ids))
 
     logger.info("Fetching from arXiv: %s", ", ".join(categories))
-    logger.info("Target: %d papers (min year: %d)", args.size, args.min_year)
+    logger.info("Target total: %d papers (min year: %d)", args.size, args.min_year)
+
+    if len(existing_ids) >= args.size:
+        logger.info(
+            "Target already satisfied: %d papers in %s",
+            len(existing_ids),
+            output_path,
+        )
+        return
 
     import arxiv
 
@@ -211,17 +230,23 @@ def main():
                         written, checked, skipped_old, skipped_dup,
                     )
 
-                if written >= args.size:
+                if len(existing_ids) >= args.size:
                     break
 
         except KeyboardInterrupt:
             logger.info("Interrupted. Progress saved.")
 
     logger.info(
-        "Done! Wrote %d papers (checked %d, skipped %d old + %d dup)",
-        written, checked, skipped_old, skipped_dup,
+        "Done! Wrote %d new papers; output now contains %d "
+        "(checked %d, skipped %d old + %d dup)",
+        written, len(existing_ids), checked, skipped_old, skipped_dup,
     )
     logger.info("Output: %s (%.0f KB)", output_path, output_path.stat().st_size / 1024)
+    if len(existing_ids) < args.size:
+        sys.exit(
+            f"Target not reached: {len(existing_ids)}/{args.size} papers. "
+            "The partial JSONL is preserved; re-run the same command to continue."
+        )
 
 
 if __name__ == "__main__":

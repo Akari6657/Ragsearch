@@ -105,7 +105,7 @@ def main():
     args = parser.parse_args()
 
     output_path = Path(args.output) if args.output else (
-        DATA_DIR / f"peS2o_cs_fulltext_{args.size}.jsonl"
+        DATA_DIR / f"peS2o_fulltext_{args.size}.jsonl"
     )
 
     # Locate the shard in HF cache

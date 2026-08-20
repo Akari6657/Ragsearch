@@ -12,6 +12,8 @@ FAISS vector retrieval, and citation-aware RAG.
 - `/search` returns `503 INDEX_NOT_READY` for `mode=vector` or `mode=hybrid` until FAISS is built.
 - Runtime index paths can be overridden with `CITEQUEST_DB_PATH` and `CITEQUEST_FAISS_DIR`.
 - `/ask` and AI Overview are implemented; without `LLM_API_KEY`, the app uses a mock LLM provider for local development.
+- Retrieval Benchmark v1 tooling is under active validation; no official 50k result is claimed yet.
+- Public benchmark protocol: [`docs/BENCHMARK_V1.md`](docs/BENCHMARK_V1.md).
 - Local generated data and indexes are intentionally not committed.
 
 ---
@@ -29,9 +31,10 @@ pip install -e ".[all]"
 cp .env.example .env
 # Edit .env with your DeepSeek API key
 
-# 3. Create a small demo corpus from an existing local peS2o full-text corpus
+# 3. Create a small demo corpus from an optional peS2o full-text experiment
+#    (peS2o is not filtered to computer science by this project)
 python scripts/sample_corpus.py \
-  --input data/raw/peS2o_cs_fulltext_50000.jsonl \
+  --input data/raw/peS2o_fulltext_50000.jsonl \
   --output data/raw/demo_peS2o_1000.jsonl \
   --size 1000 \
   --seed 42
@@ -65,8 +68,9 @@ such as `data/indexes/demo10k/`.
 
 If you do not already have a local peS2o corpus, use
 `scripts/download_fulltext.py` or `scripts/download_arxiv.py` to create one
-first. The larger 50k-paper peS2o corpus is treated as a benchmark dataset, not
-the default quickstart path.
+first. peS2o is retained as an optional full-text stress test and is not
+CS-filtered. The official retrieval quality benchmark uses a separate 50k-paper
+arXiv CS corpus under `data/indexes/benchmark_v1/`.
 
 ---
 
