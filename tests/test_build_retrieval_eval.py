@@ -156,6 +156,53 @@ def test_generated_query_constraints_cover_id_author_and_question_form():
     assert any("question mark" in reason for reason in reasons)
 
 
+def test_short_multi_word_title_is_checked_for_query_leakage():
+    paper = TargetPaper(
+        paper_id="2301.00002",
+        title="Graph Learning",
+        abstract="Useful abstract.",
+        authors=(),
+        source_category="AI",
+    )
+    target = QueryTarget("q2", "dev", "keyword", paper)
+
+    reasons = validate_generated_query(
+        "robust methods for graph learning under noise", target
+    )
+
+    assert any("phrase from the title" in reason for reason in reasons)
+
+
+def test_single_word_title_does_not_block_unavoidable_topic_term():
+    paper = TargetPaper(
+        paper_id="2301.00003",
+        title="Attention",
+        abstract="Useful abstract.",
+        authors=(),
+        source_category="AI",
+    )
+    target = QueryTarget("q3", "dev", "keyword", paper)
+
+    reasons = validate_generated_query("efficient attention for long contexts", target)
+
+    assert not any("title" in reason for reason in reasons)
+
+
+def test_short_title_check_uses_token_boundaries():
+    paper = TargetPaper(
+        paper_id="2301.00004",
+        title="Graph Learning",
+        abstract="Useful abstract.",
+        authors=(),
+        source_category="AI",
+    )
+    target = QueryTarget("q4", "dev", "keyword", paper)
+
+    reasons = validate_generated_query("paragraph learning methods for documents", target)
+
+    assert not any("title" in reason for reason in reasons)
+
+
 def test_build_eval_set_freezes_valid_file_and_refuses_accidental_overwrite(tmp_path):
     db_path = tmp_path / "metadata.sqlite"
     output_path = tmp_path / "retrieval_v1.jsonl"

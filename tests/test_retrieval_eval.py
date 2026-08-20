@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import pytest
 
 from app.eval.retrieval_eval import (
+    _benchmark_status,
     EvalDataError,
     EvalQuery,
     build_benchmark_manifest,
@@ -303,3 +304,44 @@ def test_manifest_reads_and_cross_checks_real_artifacts(tmp_path):
     assert manifest["embedding_model"] == "fake"
     assert len(manifest["raw_file_sha256"]) == 64
     assert len(manifest["eval_file_sha256"]) == 64
+
+
+def test_official_gate_requires_exactly_one_chunk_per_paper():
+    queries = [
+        EvalQuery(
+            query_id=f"q{index + 1:04d}",
+            query=f"benchmark query {index + 1}",
+            query_type=("keyword", "natural_question", "semantic_paraphrase")[
+                index % 3
+            ],
+            split="dev" if index < 50 else "test",
+            relevant_paper_ids=(f"P{index + 1}",),
+            source_paper_id=f"P{index + 1}",
+            source_category="Computer Science",
+        )
+        for index in range(150)
+    ]
+    manifest = {
+        "corpus": "arxiv_cs",
+        "paper_count": 50_000,
+        "chunk_count": 50_000,
+        "fts_row_count": 50_000,
+        "faiss_vector_count": 50_000,
+        "id_map_count": 50_000,
+        "embedding_model": "BAAI/bge-m3",
+        "embedding_dim": 1024,
+        "raw_file_sha256": "raw-hash",
+        "eval_file_sha256": "eval-hash",
+        "git_commit": "commit",
+        "git_dirty": False,
+    }
+
+    assert _benchmark_status(manifest, queries) == "benchmark_v1"
+
+    manifest.update(
+        chunk_count=50_001,
+        fts_row_count=50_001,
+        faiss_vector_count=50_001,
+        id_map_count=50_001,
+    )
+    assert _benchmark_status(manifest, queries) == "smoke_or_development"

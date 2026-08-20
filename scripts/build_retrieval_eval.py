@@ -266,12 +266,18 @@ def parse_generated_query(text: str) -> str:
 def _contains_title_ngram(query: str, title: str, n: int = 5) -> bool:
     query_tokens = normalize_title(query).split()
     title_tokens = normalize_title(title).split()
-    if len(title_tokens) < n:
+    # A single-word title is often also the unavoidable topic term. For short
+    # multi-word titles, check the complete title; otherwise use an n-gram.
+    if len(title_tokens) < 2:
         return False
-    query_text = " ".join(query_tokens)
+    window_size = min(n, len(title_tokens))
+    query_windows = {
+        tuple(query_tokens[start : start + window_size])
+        for start in range(len(query_tokens) - window_size + 1)
+    }
     return any(
-        " ".join(title_tokens[start : start + n]) in query_text
-        for start in range(len(title_tokens) - n + 1)
+        tuple(title_tokens[start : start + window_size]) in query_windows
+        for start in range(len(title_tokens) - window_size + 1)
     )
 
 
@@ -289,7 +295,7 @@ def validate_generated_query(query: str, target: QueryTarget) -> list[str]:
     if normalized_query == normalize_title(target.paper.title):
         reasons.append("the query copies the full paper title")
     if _contains_title_ngram(query, target.paper.title):
-        reasons.append("the query copies a five-word phrase from the title")
+        reasons.append("the query copies a multi-word phrase from the title")
 
     normalized_with_spaces = f" {normalized_query} "
     if normalize_title(target.paper.paper_id) in normalized_query:

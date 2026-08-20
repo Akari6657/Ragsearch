@@ -99,17 +99,17 @@ def test_db():
 class TestParseQuery:
     def test_simple_or(self):
         fts5, phrases = _parse_query("neural network")
-        assert fts5 == "neural network"
+        assert fts5 == "neural OR network"
         assert phrases == []
 
     def test_quoted_phrase(self):
         fts5, phrases = _parse_query('"neural network"')
-        assert fts5 == "neural network"
+        assert fts5 == "neural OR network"
         assert phrases == ["neural network"]
 
     def test_mixed(self):
         fts5, phrases = _parse_query('computer "neural network" optimization')
-        assert fts5 == "computer neural network optimization"
+        assert fts5 == "computer OR neural OR network OR optimization"
         assert phrases == ["neural network"]
 
     def test_special_chars(self):
@@ -124,6 +124,12 @@ class TestParseQuery:
 
 
 class TestSearchLexical:
+    def test_multi_term_query_uses_or_semantics(self, test_db):
+        results = search_lexical("neural graph", top_k=5, db_path=test_db)
+        paper_ids = {result.paper_id for result in results}
+
+        assert {"P1", "P2"}.issubset(paper_ids)
+
     def test_exact_match(self, test_db):
         results = search_lexical("neural networks", top_k=5, db_path=test_db)
         assert len(results) >= 1

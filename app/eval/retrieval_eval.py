@@ -467,6 +467,7 @@ def _benchmark_status(manifest: dict[str, Any], queries: Sequence[EvalQuery]) ->
     official = (
         manifest.get("corpus") == "arxiv_cs"
         and manifest.get("paper_count") == OFFICIAL_PAPER_COUNT
+        and manifest.get("paper_count") == manifest.get("chunk_count")
         and manifest.get("chunk_count") == manifest.get("fts_row_count")
         and manifest.get("chunk_count") == manifest.get("faiss_vector_count")
         and manifest.get("chunk_count") == manifest.get("id_map_count")

@@ -92,7 +92,9 @@ def _parse_query(query: str) -> tuple[str, list[str]]:
     words = cleaned.lower().split()
     safe_words = [f'"{w}"' if "-" in w else w for w in words]
 
-    fts5_query = " ".join(safe_words) if safe_words else ""
+    # FTS5 treats whitespace as implicit AND. Use the explicit operator so
+    # each query term can independently contribute a BM25 match.
+    fts5_query = " OR ".join(safe_words) if safe_words else ""
 
     return fts5_query, phrases
 
