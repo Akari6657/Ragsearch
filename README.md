@@ -53,6 +53,16 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 # 6. Open http://127.0.0.1:8000
 ```
 
+FAISS builds are resumable. Embeddings are written in durable batches under
+`<output-dir>/.build/`; after an interruption, run the same command to continue
+from the last completed batch. Use `--restart` only when you intentionally want
+to discard that checkpoint. A successful build writes `build_meta.json` with
+the corpus signature, model, vector count, index settings, and timings.
+
+For the portfolio-scale 10k demo, use the same pipeline with
+`--size 10000`, `data/raw/demo_peS2o_10000.jsonl`, and an isolated output path
+such as `data/indexes/demo10k/`.
+
 If you do not already have a local peS2o corpus, use
 `scripts/download_fulltext.py` or `scripts/download_arxiv.py` to create one
 first. The larger 50k-paper peS2o corpus is treated as a benchmark dataset, not
@@ -133,6 +143,7 @@ User Query
 - Chunk text = Title + Abstract, plus body chunks when full text is available
 - OR search + phrase boost (user can use `"..."` for exact phrase matching)
 - FAISS is local and file-based; generated indexes are not committed
+- Long embedding builds use a disk-backed memmap and resumable checkpoints
 - AI Overview on demand, not every search (router decides)
 - Citations validated but answer never rejected (frontend controls display)
 
