@@ -10,9 +10,8 @@ __pycache__/
 .vscode/
 .idea/
 
-# Local planning docs; publish the benchmark protocol used by reported results.
+# Local planning and benchmark docs.
 docs/*
-!docs/BENCHMARK_V1.md
 AGENTS.md
 CLAUDE.md
 notes/
