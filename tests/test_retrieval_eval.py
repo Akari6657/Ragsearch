@@ -240,6 +240,7 @@ def test_full_protocol_uses_dev_for_tuning_and_marks_small_run_as_smoke():
     )
     markdown = render_markdown_report(result)
     assert "Smoke / Development Run" in markdown
+    assert "does not satisfy the exact official Benchmark v1" in markdown
     assert "Selected alpha: **0.20**" in markdown
 
 

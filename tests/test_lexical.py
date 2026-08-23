@@ -117,6 +117,24 @@ class TestParseQuery:
         assert "(" not in fts5
         assert ")" not in fts5
 
+    def test_sentence_punctuation_is_tokenized_safely(self):
+        fts5, phrases = _parse_query(
+            "Adaptive decoding, scheduling, and multi-step training."
+        )
+        assert fts5 == (
+            "adaptive OR decoding OR scheduling OR and OR multi OR step OR training"
+        )
+        assert phrases == []
+
+    def test_fts5_operator_words_are_lowercased(self):
+        fts5, _ = _parse_query("OR AND NOT NEAR")
+        assert fts5 == "or OR and OR not OR near"
+
+    def test_only_punctuation_is_empty(self):
+        fts5, phrases = _parse_query("... , ! ?")
+        assert fts5 == ""
+        assert phrases == []
+
     def test_empty(self):
         fts5, phrases = _parse_query("")
         assert fts5 == ""
@@ -133,6 +151,13 @@ class TestSearchLexical:
     def test_exact_match(self, test_db):
         results = search_lexical("neural networks", top_k=5, db_path=test_db)
         assert len(results) >= 1
+        assert results[0].paper_id == "P1"
+
+    def test_sentence_punctuation_does_not_break_search(self, test_db):
+        results = search_lexical(
+            "Neural networks, image recognition.", top_k=5, db_path=test_db
+        )
+        assert results
         assert results[0].paper_id == "P1"
 
     def test_partial_match(self, test_db):

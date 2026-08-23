@@ -28,10 +28,6 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-FTS5_SPECIAL = set("()*^\":{}[]?!")
-"""FTS5 syntax characters to strip from user input.  Hyphen is deliberately
-kept — FTS5's tokenizer splits 'retrieval-augmented' into two tokens."""
-
 PHRASE_BOOST_C = 0.3
 """Phrase boost coefficient. Controls how much each phrase hit increases the score."""
 
@@ -68,6 +64,10 @@ LIMIT ?
 # Matches "quoted text" segments
 _QUOTED_RE = re.compile(r'"([^"]*)"')
 
+# FTS5 barewords accept Unicode alphanumerics and underscores. Extracting only
+# those tokens keeps punctuation and query-language operators out of MATCH.
+_TOKEN_RE = re.compile(r"\w+", flags=re.UNICODE)
+
 
 def _parse_query(query: str) -> tuple[str, list[str]]:
     """Parse user query into FTS5 OR terms + phrase list for post-boost.
@@ -83,14 +83,11 @@ def _parse_query(query: str) -> tuple[str, list[str]]:
     # Extract quoted phrases
     phrases = [m.lower() for m in _QUOTED_RE.findall(query)]
 
-    # Strip FTS5 special characters and quotes (keep all words)
-    cleaned = "".join(ch for ch in query if ch not in FTS5_SPECIAL and ch != '"')
-
-    # Split into words — all go into OR query.
-    # Words containing hyphens must be quoted so FTS5 doesn't interpret
-    # "state-of" as a column reference.
-    words = cleaned.lower().split()
-    safe_words = [f'"{w}"' if "-" in w else w for w in words]
+    # Tokenize instead of maintaining a partial punctuation denylist. This
+    # mirrors FTS5's default treatment of punctuation and makes arbitrary user
+    # input safe to pass to MATCH. Lowercasing also prevents words such as OR
+    # and NEAR from being interpreted as FTS5 query operators.
+    safe_words = _TOKEN_RE.findall(query.lower())
 
     # FTS5 treats whitespace as implicit AND. Use the explicit operator so
     # each query term can independently contribute a BM25 match.

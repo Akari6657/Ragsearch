@@ -835,8 +835,8 @@ def render_markdown_report(result: dict[str, Any]) -> str:
     if status != "benchmark_v1":
         lines.extend(
             [
-                "> This run is not the official Benchmark v1 because it does not use the full "
-                "50,000-paper corpus and 150-query frozen set.",
+                "> This run does not satisfy the exact official Benchmark v1 artifact and "
+                "query-set gate; treat all numbers below as smoke/development results.",
                 "",
             ]
         )
