@@ -136,8 +136,8 @@ public IR benchmark.
 - 50k arXiv CS corpus and SQLite/FTS index: complete locally.
 - Query generator, leakage checks, metrics, report builder, and reproducibility
   gates: complete.
-- Frozen 150-query set, 50k FAISS index, and official baseline report: in
-  progress.
+- Frozen 150-query set and pre-freeze quality audit: complete locally.
+- 50k FAISS index and official baseline report: in progress.
 
 ## API Surface
 
