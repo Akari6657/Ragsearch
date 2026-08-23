@@ -159,6 +159,9 @@ Otherwise the output is explicitly marked `smoke_or_development`.
 ```bash
 python scripts/download_arxiv.py \
   --size 50000 \
+  --strategy category-balanced \
+  --min-year 2020 \
+  --end-date 2026-08-23 \
   --output data/raw/arxiv_cs_benchmark_v1_50000.jsonl
 
 python scripts/build_metadata_db.py \
