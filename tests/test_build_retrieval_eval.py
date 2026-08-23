@@ -137,6 +137,7 @@ def test_query_generation_retries_invalid_title_copy_at_low_temperature():
     assert model == "fake-generator"
     assert len(provider.calls) == 2
     assert provider.calls[0]["temperature"] == 0.0
+    assert provider.calls[0]["max_tokens"] == 1024
 
 
 def test_generated_query_constraints_cover_id_author_and_question_form():
@@ -201,6 +202,40 @@ def test_short_title_check_uses_token_boundaries():
     reasons = validate_generated_query("paragraph learning methods for documents", target)
 
     assert not any("title" in reason for reason in reasons)
+
+
+def test_reordered_title_keywords_are_checked_for_query_leakage():
+    paper = TargetPaper(
+        paper_id="2301.00005",
+        title="Adaptive Trust Metrics for Multi LLM Systems in Regulated Industries",
+        abstract="Useful abstract.",
+        authors=(),
+        source_category="AI",
+    )
+    target = QueryTarget("q5", "dev", "keyword", paper)
+
+    reasons = validate_generated_query(
+        "adaptive trust metrics multi LLM regulated industries", target
+    )
+
+    assert any("too many words from the title" in reason for reason in reasons)
+
+
+def test_title_overlap_check_preserves_realistic_partial_keyword_overlap():
+    paper = TargetPaper(
+        paper_id="2301.00006",
+        title="Adaptive Trust Metrics for Multi LLM Systems in Regulated Industries",
+        abstract="Useful abstract.",
+        authors=(),
+        source_category="AI",
+    )
+    target = QueryTarget("q6", "dev", "keyword", paper)
+
+    reasons = validate_generated_query(
+        "measuring dependable language model behavior in healthcare", target
+    )
+
+    assert not any("too many words from the title" in reason for reason in reasons)
 
 
 def test_build_eval_set_freezes_valid_file_and_refuses_accidental_overwrite(tmp_path):

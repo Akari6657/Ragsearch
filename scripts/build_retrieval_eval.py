@@ -36,7 +36,9 @@ DEFAULT_DEV_SIZE = 50
 DEFAULT_SEED = 42
 DEFAULT_MIN_ABSTRACT_WORDS = 60
 GENERATION_TEMPERATURE = 0.0
+GENERATION_MAX_TOKENS = 1024
 MAX_GENERATION_ATTEMPTS = 3
+MAX_TITLE_TOKEN_OVERLAP = 0.8
 
 _WORD_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 _QUESTION_STARTS = {
@@ -217,7 +219,9 @@ def _prompt_for(target: QueryTarget, feedback: str | None = None) -> tuple[str, 
     type_instructions = {
         "keyword": (
             "Write a short realistic academic keyword query of 3-12 words. "
-            "It must not be a full sentence or end with a question mark."
+            "It must not be a full sentence or end with a question mark. "
+            "Do not merely remove or reorder words from the title; rephrase at least "
+            "one central idea."
         ),
         "natural_question": (
             "Write a self-contained natural-language research question of 5-30 words. "
@@ -281,6 +285,16 @@ def _contains_title_ngram(query: str, title: str, n: int = 5) -> bool:
     )
 
 
+def _has_excessive_title_token_overlap(query: str, title: str) -> bool:
+    """Reject title-derived queries while preserving normal topic-term overlap."""
+    query_tokens = normalize_title(query).split()
+    title_tokens = set(normalize_title(title).split())
+    if len(query_tokens) < 5 or len(title_tokens) < 5:
+        return False
+    overlap = sum(token in title_tokens for token in query_tokens)
+    return overlap / len(query_tokens) >= MAX_TITLE_TOKEN_OVERLAP
+
+
 def validate_generated_query(query: str, target: QueryTarget) -> list[str]:
     """Return deterministic rejection reasons for generated query text."""
     reasons: list[str] = []
@@ -296,6 +310,8 @@ def validate_generated_query(query: str, target: QueryTarget) -> list[str]:
         reasons.append("the query copies the full paper title")
     if _contains_title_ngram(query, target.paper.title):
         reasons.append("the query copies a multi-word phrase from the title")
+    if _has_excessive_title_token_overlap(query, target.paper.title):
+        reasons.append("the query reuses too many words from the title")
 
     normalized_with_spaces = f" {normalized_query} "
     if normalize_title(target.paper.paper_id) in normalized_query:
@@ -340,7 +356,7 @@ def generate_query(
             system=system,
             user=user,
             temperature=GENERATION_TEMPERATURE,
-            max_tokens=100,
+            max_tokens=GENERATION_MAX_TOKENS,
         )
         query = parse_generated_query(response.text)
         last_reasons = validate_generated_query(query, target)
@@ -364,6 +380,7 @@ def _record_for(target: QueryTarget, query: str, model: str) -> dict[str, Any]:
         "source_category": target.paper.source_category,
         "generation_model": model,
         "generation_temperature": GENERATION_TEMPERATURE,
+        "generation_max_tokens": GENERATION_MAX_TOKENS,
     }
 
 

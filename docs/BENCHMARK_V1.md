@@ -65,6 +65,8 @@ evidence.
   words.
 - One known relevant paper is recorded per generated query.
 - Query generation uses temperature 0 and bounded validation/retries.
+- Long title phrases and queries composed almost entirely of title words are rejected.
+- Each record captures the generation model, temperature, and output-token budget.
 - A `.partial` JSONL checkpoint makes API-backed generation resumable.
 
 The test split is frozen and must not be used to choose alpha, candidate depth,
