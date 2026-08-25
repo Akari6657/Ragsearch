@@ -1,5 +1,7 @@
 # CiteQuest-RAG
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 **Local-first hybrid academic search with citation-grounded answers.**
 
 CiteQuest-RAG is an end-to-end AI application for searching scientific papers
@@ -11,9 +13,9 @@ The project is intentionally more than an LLM wrapper: papers are ingested and
 indexed locally, every generated answer is tied to retrieved chunks, and the
 retrieval stack is evaluated independently from the LLM.
 
-> **Status:** the product pipeline and reproducible Benchmark v1 harness are
-> implemented. The official 50,000-paper baseline is in progress; no retrieval
-> quality result is claimed before the frozen test run is complete.
+> **Status:** the end-to-end product pipeline and official Retrieval Benchmark
+> v1 are complete. On the frozen 100-query test split over 50,000 papers,
+> Hybrid retrieval achieved 95% HitRate@10 and 0.8881 nDCG@10.
 
 ## Highlights
 
@@ -26,7 +28,46 @@ retrieval stack is evaluated independently from the LLM.
 | Reproducible indexing | Local SQLite and FAISS artifacts with resumable, disk-backed embedding builds |
 | Evaluation-first workflow | Frozen dev/test protocol, paper-level metrics, latency reporting, and deterministic error groups |
 | Runnable application | FastAPI endpoints, SSE progress streaming, health checks, and a browser search interface |
-| Automated verification | 164 unit, integration, and end-to-end smoke tests |
+| Automated verification | 168 unit, integration, and end-to-end smoke tests |
+
+## Quickstart
+
+Python 3.11 or newer is required. Corpora and generated indexes are local build
+artifacts and are intentionally not included in the repository.
+
+```bash
+git clone https://github.com/Akari6657/Ragsearch.git
+cd Ragsearch
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]" arxiv python-dotenv
+
+# Download a small arXiv CS corpus.
+python scripts/download_arxiv.py \
+  --size 1000 \
+  --output data/raw/arxiv_cs_demo_1000.jsonl
+
+# Build SQLite metadata, FTS5, and FAISS indexes.
+python scripts/build_metadata_db.py \
+  --input data/raw/arxiv_cs_demo_1000.jsonl \
+  --db data/indexes/demo/metadata.sqlite \
+  --overwrite
+python scripts/build_fts.py --db data/indexes/demo/metadata.sqlite
+python scripts/build_faiss.py \
+  --db data/indexes/demo/metadata.sqlite \
+  --output-dir data/indexes/demo/faiss \
+  --batch-size 8
+
+# Point the API at the demo artifacts.
+CITEQUEST_DB_PATH=data/indexes/demo/metadata.sqlite \
+CITEQUEST_FAISS_DIR=data/indexes/demo/faiss \
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000`. Search works without an LLM key. For real RAG
+generation, copy `.env.example` to `.env` and configure an OpenAI-compatible
+endpoint, model, and API key.
 
 ## How It Works
 
@@ -107,8 +148,8 @@ Unit tests use a mock provider, so the test suite never depends on a paid API.
 
 ## Retrieval Benchmark v1
 
-The current project priority is a controlled baseline before adding rerankers,
-HyDE, multi-hop retrieval, MCP integrations, or Agent workflows.
+Benchmark v1 establishes a controlled retrieval baseline before adding
+rerankers, HyDE, multi-hop retrieval, MCP integrations, or Agent workflows.
 
 | Item | Protocol |
 |---|---|
@@ -124,6 +165,37 @@ Official-run gates verify corpus size, query distribution, SQLite/FTS/FAISS
 counts, ID-map order, embedding dimension, artifact hashes, and the recorded Git
 revision. The test split is never used to select retrieval parameters.
 
+### Measured Results
+
+| Method | HitRate@5 | HitRate@10 | MRR@10 | nDCG@10 | p50 latency |
+|---|---:|---:|---:|---:|---:|
+| BM25 | 0.8700 | 0.9000 | 0.8093 | 0.8315 | 162.003 ms |
+| BGE-M3 Dense | 0.8900 | 0.9100 | 0.7951 | 0.8233 | 21.237 ms |
+| Hybrid 0.5 | **0.9400** | **0.9500** | **0.8673** | **0.8881** | 203.049 ms |
+
+The dev sweep selected `alpha = 0.50`, so the tuned Hybrid result equals the
+predefined 0.5 baseline. Hybrid improved HitRate@10 by 4 percentage points over
+the best individual retriever. Its largest remaining weakness is semantic
+paraphrase retrieval, where HitRate@10 was 0.8529 compared with 1.0000 for both
+keyword and natural-question queries.
+
+Reproduce the benchmark after building the local 50k artifacts:
+
+```bash
+python -m app.eval.retrieval_eval \
+  --eval data/eval/retrieval_v1.jsonl \
+  --db data/indexes/benchmark_v1/metadata.sqlite \
+  --index-dir data/indexes/benchmark_v1/faiss \
+  --raw data/raw/arxiv_cs_benchmark_v1_50000.jsonl \
+  --manifest reports/benchmark_v1_manifest.json \
+  --output-json reports/retrieval_baseline_v1.json \
+  --output-md reports/retrieval_baseline_v1.md
+```
+
+See the [full Benchmark v1 report](reports/retrieval_baseline_v1.md) for the
+dev alpha sweep, per-query-type results, latency, and deterministic error
+groups.
+
 This is a synthetic known-item benchmark: each query is generated from one
 target paper's title and abstract. It supports controlled retriever comparison,
 but it is not presented as a substitute for human relevance judgments or a
@@ -137,7 +209,8 @@ public IR benchmark.
 - Query generator, leakage checks, metrics, report builder, and reproducibility
   gates: complete.
 - Frozen 150-query set and pre-freeze quality audit: complete locally.
-- 50k FAISS index and official baseline report: in progress.
+- 50k BGE-M3 FAISS index and official baseline report: complete locally.
+- Retrieval optimization after the measured baseline: not started.
 
 ## API Surface
 
@@ -161,45 +234,6 @@ Example search request:
   "include_overview": true
 }
 ```
-
-## Quickstart
-
-Python 3.11 or newer is required. Corpora and generated indexes are local build
-artifacts and are intentionally not included in the repository.
-
-```bash
-git clone https://github.com/Akari6657/Ragsearch.git
-cd Ragsearch
-
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[all]" arxiv python-dotenv
-
-# Download a small arXiv CS corpus.
-python scripts/download_arxiv.py \
-  --size 1000 \
-  --output data/raw/arxiv_cs_demo_1000.jsonl
-
-# Build SQLite metadata, FTS5, and FAISS indexes.
-python scripts/build_metadata_db.py \
-  --input data/raw/arxiv_cs_demo_1000.jsonl \
-  --db data/indexes/demo/metadata.sqlite \
-  --overwrite
-python scripts/build_fts.py --db data/indexes/demo/metadata.sqlite
-python scripts/build_faiss.py \
-  --db data/indexes/demo/metadata.sqlite \
-  --output-dir data/indexes/demo/faiss \
-  --batch-size 8
-
-# Point the API at the demo artifacts.
-CITEQUEST_DB_PATH=data/indexes/demo/metadata.sqlite \
-CITEQUEST_FAISS_DIR=data/indexes/demo/faiss \
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Open `http://127.0.0.1:8000`. Search works without an LLM key. For real RAG
-generation, copy `.env.example` to `.env` and configure an OpenAI-compatible
-endpoint, model, and API key.
 
 ## Tech Stack
 
@@ -241,14 +275,11 @@ behavior.
 
 ## Next Milestone
 
-1. Freeze and review the 150-query evaluation set.
-2. Build the official 50k BGE-M3 FAISS index.
-3. Run BM25, Dense, Hybrid 0.5, and dev-tuned Hybrid on the untouched test set.
-4. Publish aggregate metrics, query-type breakdowns, latency, and representative
-   failure cases.
-5. Choose the next optimization from measured errors rather than adding features
-   speculatively.
-
-## License
-
-MIT
+1. Diagnose semantic-paraphrase misses with candidate Recall@50 and FAISS
+   `nprobe` sweeps on the dev split.
+2. Determine whether the remaining failures come from candidate generation or
+   score fusion before selecting an optimization.
+3. Evaluate reranking or an alternative fusion method only when the relevant
+   paper is already present in the candidate pool.
+4. Freeze a fresh holdout before claiming optimized v2 results, so Benchmark v1
+   test observations are not reused for model selection.

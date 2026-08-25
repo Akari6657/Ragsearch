@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "corpus": "arxiv_cs",
+  "paper_count": 50000,
+  "chunk_count": 50000,
+  "fts_row_count": 50000,
+  "raw_file": "data/raw/arxiv_cs_benchmark_v1_50000.jsonl",
+  "raw_file_sha256": "d43205c325be9f6e1d3112277324b59e397ff96626451559db0f05e81ccd6ea0",
+  "eval_file": "data/eval/retrieval_v1.jsonl",
+  "eval_file_sha256": "bb5e705bddeb4cab32488b8b5274ebce78a6f6eca9e885be4f816022eb1837a7",
+  "database_file": "data/indexes/benchmark_v1/metadata.sqlite",
+  "embedding_model": "BAAI/bge-m3",
+  "embedding_dim": 1024,
+  "faiss_index_type": "IndexIVFFlat",
+  "faiss_vector_count": 50000,
+  "id_map_count": 50000,
+  "faiss_nlist": 894,
+  "faiss_nprobe": 64,
+  "git_commit": "45d3c0a7973c83ca2d9a0a9bc039d4438f7c8adf",
+  "git_dirty": false,
+  "created_at": "2026-08-23T10:17:21.510695+00:00",
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "accelerator": {
+      "torch_version": "2.12.1+cu130",
+      "torch_cuda_version": "13.0",
+      "cuda_available": true,
+      "device_count": 1,
+      "device_index": 0,
+      "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU"
+    },
+    "numpy": "2.5.0",
+    "faiss": "1.14.3"
+  },
+  "faiss_build": {
+    "version": 1,
+    "status": "complete",
+    "created_at": "2026-08-23T08:52:17.241015+00:00",
+    "db_signature": {
+      "path": "data/indexes/benchmark_v1/metadata.sqlite",
+      "size_bytes": 350396416,
+      "mtime_ns": 1787466020109031488,
+      "chunk_count": 50000,
+      "min_rowid": 1,
+      "max_rowid": 50000,
+      "first_chunk_id": "2608.20320_chunk0",
+      "last_chunk_id": "2411.13039_chunk0"
+    },
+    "embedding_model": "BAAI/bge-m3",
+    "vector_dim": 1024,
+    "num_vectors": 50000,
+    "encoder_batch_size": 8,
+    "checkpoint_size": 256,
+    "faiss_add_batch_size": 4096,
+    "encoding_seconds": 2700.912,
+    "build_run_seconds": 2743.225,
+    "index_type": "IndexIVFFlat",
+    "nlist": 894,
+    "training_vectors": 34866
+  }
+}
