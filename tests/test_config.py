@@ -10,9 +10,11 @@ from app.core.config import (
     DEFAULT_DB_PATH,
     DEFAULT_FAISS_DIR,
     DEFAULT_HYBRID_ALPHA,
+    DEFAULT_REWRITE_TIMEOUT_SECONDS,
     get_db_path,
     get_faiss_dir,
     get_hybrid_alpha,
+    get_rewrite_timeout_seconds,
     resolve_hybrid_alpha,
 )
 from app.main import health
@@ -53,6 +55,26 @@ def test_explicit_hybrid_alpha_overrides_environment(monkeypatch):
     monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "invalid")
 
     assert resolve_hybrid_alpha(0.2) == 0.2
+
+
+def test_default_rewrite_timeout(monkeypatch):
+    monkeypatch.delenv("CITEQUEST_REWRITE_TIMEOUT_SECONDS", raising=False)
+
+    assert get_rewrite_timeout_seconds() == DEFAULT_REWRITE_TIMEOUT_SECONDS == 2.0
+
+
+def test_rewrite_timeout_from_environment(monkeypatch):
+    monkeypatch.setenv("CITEQUEST_REWRITE_TIMEOUT_SECONDS", "0.75")
+
+    assert get_rewrite_timeout_seconds() == 0.75
+
+
+@pytest.mark.parametrize("value", ["", "invalid", "0", "-0.1", "nan", "inf"])
+def test_invalid_rewrite_timeout_fails_clearly(monkeypatch, value):
+    monkeypatch.setenv("CITEQUEST_REWRITE_TIMEOUT_SECONDS", value)
+
+    with pytest.raises(ValueError, match="CITEQUEST_REWRITE_TIMEOUT_SECONDS"):
+        get_rewrite_timeout_seconds()
 
 
 @pytest.mark.parametrize("value", ["", "invalid", "-0.1", "1.1", "nan", "inf"])

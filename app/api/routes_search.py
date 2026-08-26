@@ -17,7 +17,7 @@ from app.core.config import get_db_path, get_faiss_dir
 from app.core.schemas import SearchRequest, SearchResponse, SearchResult
 from app.rag.router import route_query
 from app.rag.answer import answer_question
-from app.rag.rewriter import rewrite_query, detect_language
+from app.rag.rewriter import prepare_lexical_query
 from app.retrieval.lexical import search_lexical
 from app.retrieval.vector_store import search_vector
 from app.retrieval.hybrid import search_hybrid
@@ -76,10 +76,19 @@ def search_papers(request: SearchRequest) -> SearchResponse:
     _require_faiss_for_mode(request.mode, index_dir)
     effective_alpha = resolve_request_hybrid_alpha(request.mode, request.alpha)
 
+    # — optional query enrichment ——————————————————————————————————————
+    lexical_query = request.query
+    rewrite_keywords = ""
+    uses_lexical_signal = request.mode == "lexical" or (
+        request.mode == "hybrid" and effective_alpha is not None and effective_alpha > 0
+    )
+    if uses_lexical_signal:
+        lexical_query, rewrite_keywords = prepare_lexical_query(request.query)
+
     # — search ——————————————————————————————————————————————————————————
     if request.mode == "lexical":
         results = search_lexical(
-            query=request.query,
+            query=lexical_query,
             top_k=request.top_k,
             db_path=db_path,
         )
@@ -98,24 +107,8 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             alpha=effective_alpha,
             db_path=db_path,
             index_dir=index_dir,
+            lexical_query=lexical_query,
         )
-
-    # — Query enrichment: Chinese → extract English keywords → extra lexical search —
-    rewrite_keywords = ""
-    if detect_language(request.query) == "zh":
-        keywords = rewrite_query(request.query)
-        if keywords and keywords != request.query:
-            rewrite_keywords = keywords
-            kw_results = search_lexical(
-                keywords, top_k=request.top_k, db_path=db_path,
-            )
-            seen = {r.chunk_id for r in results}
-            for r in kw_results:
-                if r.chunk_id not in seen:
-                    results.append(r)
-                    seen.add(r.chunk_id)
-            logger.info("Query enriched: '%s' → '%s', +%d extra results",
-                        request.query[:60], keywords[:60], len(kw_results))
 
     # — Save chunk-level results for RAG (before paper-level dedup) ——
     rag_candidates = list(results)

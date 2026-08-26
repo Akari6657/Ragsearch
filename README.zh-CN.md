@@ -17,11 +17,11 @@ CiteQuest-RAG 是一个端到端 AI 应用，用于检索科研论文并基于�
 | 混合学术检索 | SQLite FTS5 BM25、BGE-M3 向量、FAISS IVF 与加权分数融合 |
 | 引用可追溯 RAG | 证据预算、编号引用、引用元数据与有效性检查 |
 | 查询理解 | 规则优先的 RAG 路由，并使用 LLM 处理模糊请求 |
-| 中文查询支持 | 可将中文查询改写为英文学术关键词，用于补充 BM25 召回 |
+| 中文查询支持 | 有界、失败可降级的英文关键词扩展，并正式参与 BM25 与 Hybrid 排名 |
 | 可复现索引构建 | 本地 SQLite 与 FAISS 产物，支持可恢复的磁盘检查点式向量构建 |
 | 评测优先 | 冻结的 dev/test 协议、论文级指标、延迟统计与确定性错误分组 |
 | 可运行应用 | FastAPI 接口、SSE 进度流、健康检查与浏览器搜索界面 |
-| 自动化验证 | 168 项单元测试、集成测试与端到端 smoke 测试 |
+| 自动化验证 | 223 项单元测试、集成测试与端到端 smoke 测试 |
 
 ## 快速开始
 
@@ -64,13 +64,19 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```mermaid
 flowchart TD
     Q[用户查询] --> M{检索模式}
-    M -->|词法检索| B[SQLite FTS5 BM25]
+    M -->|词法检索| L[准备词法查询]
     M -->|向量检索| D[BGE-M3 + FAISS]
-    M -->|混合检索| H[BM25 + Dense 分数融合]
+    M -->|混合检索| L
+    M -->|混合检索| Y[Dense：原始查询]
 
-    Q --> Z{中文查询?}
-    Z -->|是| W[英文学术关键词改写]
-    W --> X[补充 BM25 召回]
+    L --> Z{中文且已配置 LLM?}
+    Z -->|否| B[BM25：原始查询]
+    Z -->|是| W[有超时限制的英文关键词改写]
+    W -->|成功| X[BM25：原始查询 + 英文关键词]
+    W -->|超时 / 无效 / 异常| B
+    X --> H[BM25 + Dense 分数融合]
+    B --> H
+    Y --> H
 
     B --> C[检索文本块]
     D --> C
@@ -86,7 +92,7 @@ flowchart TD
     V --> A[证据化回答 + 来源]
 ```
 
-所选检索器始终接收原始查询。中文改写只是一条补充词法召回的分支，不会替换 Dense 或 Hybrid 检索。正式 Retrieval Benchmark 会绕过查询改写、路由和 RAG，确保每个 baseline 接收完全相同的冻结查询。
+对于中文 Lexical 和 Hybrid 请求，系统会将有效的英文改写与原查询组合，再统一执行一次 BM25 排名；Dense 始终接收原始查询。未配置真实 API key 时会立即跳过改写，发生超时、接口异常或输出无效时则使用完全不变的原查询。默认改写预算为 2 秒，可通过 `CITEQUEST_REWRITE_TIMEOUT_SECONDS` 配置。纯 Vector 模式不会调用改写。正式 Retrieval Benchmark 会绕过查询改写、路由和 RAG，确保每个 baseline 接收完全相同的冻结查询。
 
 ## 检索系统
 
@@ -112,6 +118,8 @@ hybrid_score = alpha * lexical_score + (1 - alpha) * dense_score
 ```
 
 生产环境默认 `alpha` 为 `0.5`，可通过 `CITEQUEST_HYBRID_ALPHA` 配置；API 请求中显式提供的值优先，响应会返回最终采用的 `effective_alpha`。Benchmark v1 始终使用显式冻结值，不受生产环境配置影响。
+
+对于完成中文扩展的 Hybrid 查询，BM25 分支接收“原始文本 + 已验证英文关键词”，Dense 分支仍接收原始文本，随后两路候选继续使用普通 Hybrid 检索相同的归一化与融合流程。
 
 ## 引用可追溯 RAG
 

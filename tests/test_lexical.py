@@ -174,6 +174,18 @@ class TestSearchLexical:
         results = search_lexical("graph", top_k=5, db_path=test_db)
         assert any(r.paper_id == "P2" for r in results)
 
+    def test_english_expansion_adds_recall_for_chinese_query(self, test_db):
+        query = "为什么图算法很重要"
+
+        assert search_lexical(query, top_k=5, db_path=test_db) == []
+
+        expanded = search_lexical(
+            f"{query} graph algorithms social networks",
+            top_k=5,
+            db_path=test_db,
+        )
+        assert any(result.paper_id == "P2" for result in expanded)
+
     def test_no_match(self, test_db):
         results = search_lexical("dinosaur paleontology", top_k=5, db_path=test_db)
         assert results == []

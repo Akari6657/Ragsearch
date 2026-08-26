@@ -63,6 +63,7 @@ def search_hybrid(
     alpha: float = DEFAULT_HYBRID_ALPHA,
     db_path: str | Path = DEFAULT_DB,
     index_dir: str | Path = DEFAULT_INDEX_DIR,
+    lexical_query: str | None = None,
 ) -> list[SearchResult]:
     """Combined lexical + vector search with weighted score fusion.
 
@@ -73,6 +74,8 @@ def search_hybrid(
                Default 0.5 gives equal weight.
         db_path: Path to metadata SQLite DB.
         index_dir: Directory with FAISS index files.
+        lexical_query: Optional query for the BM25 branch. Dense always uses
+                       ``query``. Defaults to ``query`` for existing callers.
 
     Returns:
         Deduplicated, merged results sorted by hybrid_score (descending).
@@ -80,13 +83,18 @@ def search_hybrid(
     alpha = validate_hybrid_alpha(alpha)
     db_path = Path(db_path)
     index_dir = Path(index_dir)
+    effective_lexical_query = query if lexical_query is None else lexical_query
 
     # — Fetch candidates from both retrievers —————————————————————————
     # We fetch more than top_k from each to give the merge step enough
     # material to work with.
     fetch_k = max(top_k, 20)
 
-    lexical_results = search_lexical(query, top_k=fetch_k, db_path=db_path)
+    lexical_results = search_lexical(
+        effective_lexical_query,
+        top_k=fetch_k,
+        db_path=db_path,
+    )
     vector_results = search_vector(query, top_k=fetch_k, db_path=db_path, index_dir=index_dir)
 
     if not lexical_results and not vector_results:
@@ -142,9 +150,10 @@ def search_hybrid(
     results = [r for _, r in scored[:top_k]]
 
     logger.debug(
-        "search_hybrid('%s', alpha=%.2f) → %d merged from %d lex + %d vec",
+        "search_hybrid('%s', alpha=%.2f, lexical_expanded=%s) → %d merged from %d lex + %d vec",
         query,
         alpha,
+        effective_lexical_query != query,
         len(results),
         len(lexical_results),
         len(vector_results),

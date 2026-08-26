@@ -276,7 +276,9 @@
 
         // Clear previous state
         this.loading = true;
-        this.loadingMessage = /[一-鿿]/.test(q)
+        const mayRewrite = /[一-鿿]/.test(q)
+          && (this.mode === "lexical" || (this.mode === "hybrid" && Number(this.alpha) > 0));
+        this.loadingMessage = mayRewrite
           ? "🔍 检测到中文查询，正在改写为英文关键词以提升召回..."
           : "正在搜索...";
         this.error = null;

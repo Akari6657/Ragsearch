@@ -104,3 +104,45 @@ class TestHybridMerge:
         assert [r.chunk_id for r in results] == ["C_chunk", "B_chunk", "A_chunk"]
         assert results[0].score == pytest.approx(2 / 3)
         assert results[0].score != round(results[0].score, 4)
+
+    def test_optional_lexical_query_only_changes_bm25_branch(self, monkeypatch):
+        observed = {}
+
+        def fake_lexical(query, **kwargs):
+            observed["lexical_query"] = query
+            return []
+
+        def fake_vector(query, **kwargs):
+            observed["vector_query"] = query
+            return []
+
+        monkeypatch.setattr("app.retrieval.hybrid.search_lexical", fake_lexical)
+        monkeypatch.setattr("app.retrieval.hybrid.search_vector", fake_vector)
+
+        search_hybrid(
+            "为什么 GAN 训练不稳定",
+            lexical_query="为什么 GAN 训练不稳定 GAN mode collapse convergence",
+        )
+
+        assert observed == {
+            "lexical_query": "为什么 GAN 训练不稳定 GAN mode collapse convergence",
+            "vector_query": "为什么 GAN 训练不稳定",
+        }
+
+    def test_default_lexical_query_preserves_existing_behavior(self, monkeypatch):
+        observed = {}
+
+        def fake_lexical(query, **kwargs):
+            observed["lexical"] = query
+            return []
+
+        def fake_vector(query, **kwargs):
+            observed["vector"] = query
+            return []
+
+        monkeypatch.setattr("app.retrieval.hybrid.search_lexical", fake_lexical)
+        monkeypatch.setattr("app.retrieval.hybrid.search_vector", fake_vector)
+
+        search_hybrid("same query")
+
+        assert observed == {"lexical": "same query", "vector": "same query"}

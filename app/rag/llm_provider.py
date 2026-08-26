@@ -203,16 +203,26 @@ class OpenAICompatibleProvider(LLMProvider):
 # ---------------------------------------------------------------------------
 
 
-def create_provider() -> LLMProvider:
+def is_llm_configured() -> bool:
+    """Return whether a real OpenAI-compatible provider is configured."""
+    return bool(os.getenv("LLM_API_KEY", "").strip())
+
+
+def create_provider(*, timeout: float | None = None) -> LLMProvider:
     """Create the appropriate LLM provider based on environment.
 
     If LLM_API_KEY is set, returns an OpenAICompatibleProvider (DeepSeek).
     Otherwise returns a MockLLMProvider for development.
+
+    Args:
+        timeout: Optional request timeout override. When omitted, the provider's
+                 normal timeout is preserved.
     """
-    api_key = os.getenv("LLM_API_KEY", "")
-    if api_key:
+    if is_llm_configured():
         logger.info("Using OpenAICompatibleProvider (model=%s)", os.getenv("LLM_MODEL", "deepseek-chat"))
-        return OpenAICompatibleProvider()
+        if timeout is None:
+            return OpenAICompatibleProvider()
+        return OpenAICompatibleProvider(timeout=timeout)
     else:
         logger.info("No LLM_API_KEY set — using MockLLMProvider")
         return MockLLMProvider()

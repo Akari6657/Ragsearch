@@ -4,9 +4,19 @@ import pytest
 
 from app.rag.citation import extract_citations, verify_citations
 from app.rag.context_builder import build_evidence, _estimate_tokens
-from app.rag.llm_provider import MockLLMProvider, create_provider, LLMResponse
+from app.rag.llm_provider import (
+    LLMResponse,
+    MockLLMProvider,
+    OpenAICompatibleProvider,
+    create_provider,
+)
 from app.rag.prompt import build_prompts
-from app.rag.answer import _effective_hybrid_alpha
+from app.rag import answer as rag_answer
+from app.rag.answer import (
+    _dicts_to_search_results,
+    _effective_hybrid_alpha,
+    _retrieve_evidence,
+)
 from app.core.schemas import SearchResult
 
 
@@ -137,6 +147,82 @@ class TestRAGHybridAlpha:
             _effective_hybrid_alpha("hybrid", 1.1)
 
 
+class TestRAGRetrievalRewrite:
+    def test_hybrid_uses_original_dense_and_expanded_lexical_query(
+        self, monkeypatch, tmp_path
+    ):
+        observed = {}
+        query = "如何评估 RAG"
+        expanded = f"{query} retrieval augmented generation evaluation"
+        monkeypatch.setattr(
+            rag_answer,
+            "prepare_lexical_query",
+            lambda value: (expanded, "retrieval augmented generation evaluation"),
+        )
+
+        def fake_hybrid(*args, **kwargs):
+            observed["query"] = args[0]
+            observed.update(kwargs)
+            return []
+
+        monkeypatch.setattr(rag_answer, "search_hybrid", fake_hybrid)
+
+        _retrieve_evidence(query, 5, "hybrid", 0.5, tmp_path / "db", tmp_path)
+
+        assert observed["query"] == query
+        assert observed["lexical_query"] == expanded
+
+    def test_vector_mode_skips_rewrite(self, monkeypatch, tmp_path):
+        observed = {}
+        monkeypatch.setattr(
+            rag_answer,
+            "prepare_lexical_query",
+            lambda query: pytest.fail("Vector RAG must not call rewrite"),
+        )
+
+        def fake_vector(query, **kwargs):
+            observed["query"] = query
+            return []
+
+        monkeypatch.setattr("app.retrieval.vector_store.search_vector", fake_vector)
+
+        _retrieve_evidence("中文问题", 5, "vector", None, tmp_path / "db", tmp_path)
+
+        assert observed["query"] == "中文问题"
+
+    def test_zero_alpha_hybrid_skips_rewrite(self, monkeypatch, tmp_path):
+        observed = {}
+        monkeypatch.setattr(
+            rag_answer,
+            "prepare_lexical_query",
+            lambda query: pytest.fail("Pure-vector Hybrid must not call rewrite"),
+        )
+
+        def fake_hybrid(*args, **kwargs):
+            observed.update(kwargs)
+            return []
+
+        monkeypatch.setattr(rag_answer, "search_hybrid", fake_hybrid)
+
+        _retrieve_evidence("中文问题", 5, "hybrid", 0.0, tmp_path / "db", tmp_path)
+
+        assert observed["lexical_query"] == "中文问题"
+
+    def test_in_process_pre_retrieved_results_are_preserved(self):
+        result = SearchResult(
+            paper_id="P1",
+            chunk_id="expanded_hit",
+            title="Expanded hit",
+            year=2024,
+            venue=None,
+            score=1.0,
+        )
+
+        normalized = _dicts_to_search_results([result])
+
+        assert normalized == [result]
+
+
 # ---------------------------------------------------------------------------
 # LLM provider
 # ---------------------------------------------------------------------------
@@ -162,3 +248,11 @@ class TestCreateProvider:
         monkeypatch.delenv("LLM_API_KEY", raising=False)
         provider = create_provider()
         assert isinstance(provider, MockLLMProvider)
+
+    def test_real_provider_accepts_timeout_override(self, monkeypatch):
+        monkeypatch.setenv("LLM_API_KEY", "test-key")
+
+        provider = create_provider(timeout=0.75)
+
+        assert isinstance(provider, OpenAICompatibleProvider)
+        assert provider.timeout == 0.75

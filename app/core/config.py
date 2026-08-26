@@ -14,10 +14,12 @@ from pathlib import Path
 DEFAULT_DB_PATH = Path("data/indexes/metadata.sqlite")
 DEFAULT_FAISS_DIR = Path("data/indexes/faiss")
 DEFAULT_HYBRID_ALPHA = 0.5
+DEFAULT_REWRITE_TIMEOUT_SECONDS = 2.0
 
 DB_PATH_ENV = "CITEQUEST_DB_PATH"
 FAISS_DIR_ENV = "CITEQUEST_FAISS_DIR"
 HYBRID_ALPHA_ENV = "CITEQUEST_HYBRID_ALPHA"
+REWRITE_TIMEOUT_ENV = "CITEQUEST_REWRITE_TIMEOUT_SECONDS"
 
 
 def _path_from_env(name: str, default: Path) -> Path:
@@ -59,6 +61,28 @@ def get_hybrid_alpha() -> float:
     if value is None:
         return DEFAULT_HYBRID_ALPHA
     return validate_hybrid_alpha(value, source=HYBRID_ALPHA_ENV)
+
+
+def get_rewrite_timeout_seconds() -> float:
+    """Return the time budget for optional LLM query rewriting."""
+    value = os.getenv(REWRITE_TIMEOUT_ENV)
+    if value is None:
+        return DEFAULT_REWRITE_TIMEOUT_SECONDS
+
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{REWRITE_TIMEOUT_ENV} must be a finite number greater than 0; "
+            f"got {value!r}"
+        ) from exc
+
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError(
+            f"{REWRITE_TIMEOUT_ENV} must be a finite number greater than 0; "
+            f"got {value!r}"
+        )
+    return timeout
 
 
 def resolve_hybrid_alpha(request_alpha: float | None) -> float:

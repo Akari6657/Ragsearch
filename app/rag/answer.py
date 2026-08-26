@@ -30,6 +30,7 @@ from app.rag.citation import verify_citations
 from app.rag.context_builder import build_evidence
 from app.rag.llm_provider import create_provider
 from app.rag.prompt import build_prompts
+from app.rag.rewriter import prepare_lexical_query
 from app.retrieval.hybrid import search_hybrid
 from app.retrieval.lexical import search_lexical
 
@@ -45,6 +46,46 @@ def _effective_hybrid_alpha(
         return None
     value = DEFAULT_HYBRID_ALPHA if alpha is None else alpha
     return validate_hybrid_alpha(value)
+
+
+def _retrieve_evidence(
+    question: str,
+    top_k: int,
+    retrieval_mode: str,
+    effective_alpha: float | None,
+    db_path: Path,
+    index_dir: Path,
+) -> list[SearchResult]:
+    """Retrieve evidence with optional rewrite confined to the BM25 branch."""
+    lexical_query = question
+    uses_lexical_signal = retrieval_mode == "lexical" or (
+        retrieval_mode == "hybrid"
+        and effective_alpha is not None
+        and effective_alpha > 0
+    )
+    if uses_lexical_signal:
+        lexical_query, _ = prepare_lexical_query(question)
+
+    if retrieval_mode == "hybrid":
+        assert effective_alpha is not None
+        return search_hybrid(
+            question,
+            top_k=top_k,
+            alpha=effective_alpha,
+            db_path=db_path,
+            index_dir=index_dir,
+            lexical_query=lexical_query,
+        )
+    if retrieval_mode == "vector":
+        from app.retrieval.vector_store import search_vector
+
+        return search_vector(
+            question,
+            top_k=top_k,
+            db_path=db_path,
+            index_dir=index_dir,
+        )
+    return search_lexical(lexical_query, top_k=top_k, db_path=db_path)
 
 
 def answer_question(
@@ -88,17 +129,14 @@ def answer_question(
         logger.info("Using %d pre-retrieved chunks for question: %s", len(results), question[:60])
     else:
         # Fallback: standalone /ask call without pre-retrieved results
-        if retrieval_mode == "hybrid":
-            assert effective_alpha is not None
-            results = search_hybrid(
-                question, top_k=top_k, alpha=effective_alpha,
-                db_path=db_path, index_dir=index_dir,
-            )
-        elif retrieval_mode == "vector":
-            from app.retrieval.vector_store import search_vector
-            results = search_vector(question, top_k=top_k, db_path=db_path, index_dir=index_dir)
-        else:
-            results = search_lexical(question, top_k=top_k, db_path=db_path)
+        results = _retrieve_evidence(
+            question,
+            top_k,
+            retrieval_mode,
+            effective_alpha,
+            db_path,
+            index_dir,
+        )
         logger.info("Retrieved %d evidence chunks for question: %s", len(results), question[:60])
 
     # — 2. Build evidence context ———————————————————————————————————————
@@ -189,13 +227,16 @@ _PHASE_MESSAGES = {
 }
 
 
-def _dicts_to_search_results(raw: list[dict]) -> list[SearchResult]:
-    """Convert pre-retrieved dicts (from JSON transport) back to SearchResult objects."""
+def _dicts_to_search_results(raw: list[dict | SearchResult]) -> list[SearchResult]:
+    """Normalize pre-retrieved transport dicts or in-process result objects."""
     results = []
-    for d in raw:
+    for item in raw:
+        if isinstance(item, SearchResult):
+            results.append(item)
+            continue
         try:
-            results.append(SearchResult(**d))
-        except Exception:
+            results.append(SearchResult(**item))
+        except (TypeError, ValueError):
             pass  # skip malformed entries
     return results
 
@@ -237,18 +278,14 @@ async def answer_question_stream(
         yield _sse("status", {"phase": "retrieving", "message": _PHASE_MESSAGES["retrieving"]})
 
         def _retrieve():
-            if retrieval_mode == "hybrid":
-                assert effective_alpha is not None
-                r = search_hybrid(
-                    question, top_k=top_k, alpha=effective_alpha,
-                    db_path=db_path, index_dir=index_dir,
-                )
-            elif retrieval_mode == "vector":
-                from app.retrieval.vector_store import search_vector
-                r = search_vector(question, top_k=top_k, db_path=db_path, index_dir=index_dir)
-            else:
-                r = search_lexical(question, top_k=top_k, db_path=db_path)
-            return r
+            return _retrieve_evidence(
+                question,
+                top_k,
+                retrieval_mode,
+                effective_alpha,
+                db_path,
+                index_dir,
+            )
 
         results = await asyncio.to_thread(_retrieve)
         logger.info("Retrieved %d evidence chunks for question: %s", len(results), question[:60])

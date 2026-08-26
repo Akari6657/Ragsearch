@@ -24,11 +24,11 @@ retrieval stack is evaluated independently from the LLM.
 | Hybrid academic search | SQLite FTS5 BM25, BGE-M3 embeddings, FAISS IVF, and weighted score fusion |
 | Citation-grounded RAG | Evidence budgeting, numbered citations, citation metadata, and validity checks |
 | Query understanding | Rule-first RAG routing with an LLM fallback for ambiguous requests |
-| Chinese query support | Chinese queries can be rewritten into English academic keywords for supplemental BM25 recall |
+| Chinese query support | Bounded, failure-safe English keyword expansion integrated into BM25 and Hybrid ranking |
 | Reproducible indexing | Local SQLite and FAISS artifacts with resumable, disk-backed embedding builds |
 | Evaluation-first workflow | Frozen dev/test protocol, paper-level metrics, latency reporting, and deterministic error groups |
 | Runnable application | FastAPI endpoints, SSE progress streaming, health checks, and a browser search interface |
-| Automated verification | 168 unit, integration, and end-to-end smoke tests |
+| Automated verification | 223 unit, integration, and end-to-end smoke tests |
 
 ## Quickstart
 
@@ -74,13 +74,19 @@ endpoint, model, and API key.
 ```mermaid
 flowchart TD
     Q[User query] --> M{Retrieval mode}
-    M -->|Lexical| B[SQLite FTS5 BM25]
+    M -->|Lexical| L[Prepare lexical query]
     M -->|Vector| D[BGE-M3 + FAISS]
-    M -->|Hybrid| H[BM25 + Dense score fusion]
+    M -->|Hybrid| L
+    M -->|Hybrid| Y[Dense: original query]
 
-    Q --> Z{Chinese query?}
-    Z -->|Yes| W[English academic keyword rewrite]
-    W --> X[Supplemental BM25 recall]
+    L --> Z{Chinese + LLM configured?}
+    Z -->|No| B[SQLite FTS5 BM25: original query]
+    Z -->|Yes| W[Bounded English keyword rewrite]
+    W -->|Success| X[BM25: original + English keywords]
+    W -->|Timeout / invalid / error| B
+    X --> H[BM25 + Dense score fusion]
+    B --> H
+    Y --> H
 
     B --> C[Retrieved chunks]
     D --> C
@@ -96,10 +102,14 @@ flowchart TD
     V --> A[Grounded answer + sources]
 ```
 
-The selected retriever always receives the original query. Chinese rewriting
-is a supplemental lexical recall branch, not a replacement for Dense or Hybrid
-retrieval. The official retrieval benchmark bypasses rewriting, routing, and
-RAG so every baseline receives the same frozen query.
+For Chinese lexical and Hybrid requests, a valid English rewrite is combined
+with the original query before one BM25 ranking is produced. Dense retrieval
+always receives the original query. Rewrite is skipped without a real API key
+and falls back to the unchanged query on timeout, provider error, or invalid
+output; its default time budget is two seconds and is configurable with
+`CITEQUEST_REWRITE_TIMEOUT_SECONDS`. Vector-only search never calls rewrite.
+The official retrieval benchmark bypasses rewriting, routing, and RAG so every
+baseline receives the same frozen query.
 
 ## Retrieval Stack
 
@@ -133,6 +143,11 @@ The production default `alpha` is `0.5` and can be configured with
 `CITEQUEST_HYBRID_ALPHA`; an explicit API request value takes precedence, and
 responses expose the resolved `effective_alpha`. Benchmark v1 uses explicit
 frozen values, isolated from production configuration.
+
+For an expanded Chinese Hybrid query, the lexical branch receives the original
+text plus validated English keywords while the Dense branch receives the
+original text. Both candidate lists then use the same normalization and fusion
+path as ordinary Hybrid retrieval.
 
 ## Grounded RAG
 

@@ -174,3 +174,117 @@ def test_paper_deduplication_preserves_retrieval_rank(monkeypatch, tmp_path):
 
     assert response.total_results == 2
     assert [result.chunk_id for result in response.results] == ["P1_best", "P2_only"]
+
+
+def test_chinese_hybrid_uses_expanded_lexical_query(monkeypatch, tmp_path):
+    observed = {}
+    _configure_hybrid_route(monkeypatch, tmp_path, observed)
+    query = "为什么 GAN 训练不稳定"
+    expanded = f"{query} GAN mode collapse convergence"
+    monkeypatch.setattr(
+        routes_search,
+        "prepare_lexical_query",
+        lambda value: (expanded, "GAN mode collapse convergence"),
+    )
+
+    response = routes_search.search_papers(
+        SearchRequest(query=query, mode="hybrid", top_k=3)
+    )
+
+    assert observed["query"] == query
+    assert observed["lexical_query"] == expanded
+    assert response.rewrite_keywords == "GAN mode collapse convergence"
+
+
+def test_vector_mode_never_calls_rewrite(monkeypatch, tmp_path):
+    (tmp_path / "index.faiss").write_text("fake", encoding="utf-8")
+    (tmp_path / "id_map.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(routes_search, "get_db_path", lambda: tmp_path / "metadata.sqlite")
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
+    monkeypatch.setattr(routes_search, "search_vector", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        routes_search,
+        "prepare_lexical_query",
+        lambda query: pytest.fail("Vector mode must not call rewrite"),
+    )
+    monkeypatch.setattr(
+        routes_search,
+        "route_query",
+        lambda query: SimpleNamespace(should_rag=False, reason="test"),
+    )
+
+    response = routes_search.search_papers(
+        SearchRequest(query="为什么 GAN 训练不稳定", mode="vector", top_k=3)
+    )
+
+    assert response.total_results == 0
+    assert response.rewrite_keywords == ""
+
+
+def test_zero_alpha_hybrid_skips_rewrite(monkeypatch, tmp_path):
+    observed = {}
+    _configure_hybrid_route(monkeypatch, tmp_path, observed)
+    monkeypatch.setattr(
+        routes_search,
+        "prepare_lexical_query",
+        lambda query: pytest.fail("Pure-vector Hybrid must not call rewrite"),
+    )
+
+    response = routes_search.search_papers(
+        SearchRequest(
+            query="为什么 GAN 训练不稳定",
+            mode="hybrid",
+            alpha=0.0,
+            top_k=3,
+        )
+    )
+
+    assert observed["lexical_query"] == "为什么 GAN 训练不稳定"
+    assert response.rewrite_keywords == ""
+
+
+def test_search_overview_receives_final_ranked_candidates(monkeypatch, tmp_path):
+    ranked = [
+        SearchResult(
+            paper_id="P1",
+            chunk_id="expanded_hit",
+            title="Expanded hit",
+            year=2024,
+            venue=None,
+            authors=[],
+            score=1.0,
+            abstract="Evidence",
+        )
+    ]
+    observed = {}
+    monkeypatch.setattr(routes_search, "get_db_path", lambda: tmp_path / "metadata.sqlite")
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        routes_search,
+        "prepare_lexical_query",
+        lambda query: (f"{query} retrieval evaluation", "retrieval evaluation"),
+    )
+    monkeypatch.setattr(routes_search, "search_lexical", lambda *args, **kwargs: ranked)
+    monkeypatch.setattr(
+        routes_search,
+        "route_query",
+        lambda query: SimpleNamespace(should_rag=True, reason="test"),
+    )
+
+    def fake_answer_question(**kwargs):
+        observed.update(kwargs)
+        return None
+
+    monkeypatch.setattr(routes_search, "answer_question", fake_answer_question)
+
+    response = routes_search.search_papers(
+        SearchRequest(
+            query="如何评估 RAG",
+            mode="lexical",
+            top_k=3,
+            include_overview=True,
+        )
+    )
+
+    assert observed["pre_retrieved"][0].chunk_id == "expanded_hit"
+    assert response.results[0].chunk_id == "expanded_hit"
