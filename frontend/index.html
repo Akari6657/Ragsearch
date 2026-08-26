@@ -83,6 +83,22 @@
         <span x-text="Number(alpha).toFixed(2)">0.50</span>
       </div>
 
+      <!-- Inclusive publication-year filter -->
+      <div class="year-filter" role="group" aria-label="发表年份">
+        <span>年份</span>
+        <input type="number"
+               x-model="yearFrom"
+               placeholder="起始"
+               step="1"
+               aria-label="起始年份">
+        <span>至</span>
+        <input type="number"
+               x-model="yearTo"
+               placeholder="结束"
+               step="1"
+               aria-label="结束年份">
+      </div>
+
       <!-- AI Overview toggle -->
       <label class="toggle-row">
         <input type="checkbox" x-model="includeOverview">
@@ -237,6 +253,8 @@
       query: "",
       mode: "hybrid",
       alpha: 0.5,
+      yearFrom: "",
+      yearTo: "",
       includeOverview: true,
       loading: false,
       loadingMessage: "正在搜索...",
@@ -274,6 +292,20 @@
         const q = this.query.trim();
         if (!q) return;
 
+        const yearFrom = this.yearFrom === "" ? null : Number(this.yearFrom);
+        const yearTo = this.yearTo === "" ? null : Number(this.yearTo);
+        if (
+          (yearFrom !== null && !Number.isInteger(yearFrom))
+          || (yearTo !== null && !Number.isInteger(yearTo))
+          || (yearFrom !== null && yearTo !== null && yearFrom > yearTo)
+        ) {
+          this.error = "年份范围无效：起始年份不能晚于结束年份";
+          this.results = [];
+          this.overview = null;
+          this.totalResults = 0;
+          return;
+        }
+
         // Clear previous state
         this.loading = true;
         const mayRewrite = /[一-鿿]/.test(q)
@@ -304,6 +336,8 @@
             alpha: alpha,
             include_overview: false,  // don't wait for LLM
             top_k: 10,
+            year_from: yearFrom,
+            year_to: yearTo,
           });
 
           this.results = data.results || [];

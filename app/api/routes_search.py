@@ -91,6 +91,8 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             query=lexical_query,
             top_k=request.top_k,
             db_path=db_path,
+            year_from=request.year_from,
+            year_to=request.year_to,
         )
     elif request.mode == "vector":
         results = search_vector(
@@ -98,6 +100,8 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             top_k=request.top_k,
             db_path=db_path,
             index_dir=index_dir,
+            year_from=request.year_from,
+            year_to=request.year_to,
         )
     else:  # hybrid
         assert effective_alpha is not None
@@ -108,6 +112,8 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             db_path=db_path,
             index_dir=index_dir,
             lexical_query=lexical_query,
+            year_from=request.year_from,
+            year_to=request.year_to,
         )
 
     # — Save chunk-level results for RAG (before paper-level dedup) ——

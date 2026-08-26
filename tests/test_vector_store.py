@@ -71,10 +71,11 @@ def test_db_path(test_index_dir):
         token_count INTEGER DEFAULT 0
     )""")
 
-    for pid in ["A", "B", "C", "D", "E"]:
+    years = {"A": 2018, "B": 2019, "C": 2020, "D": 2021, "E": None}
+    for pid, year in years.items():
         conn.execute(
-            "INSERT OR IGNORE INTO papers VALUES (?, ?, '', NULL, NULL, '[]', '[]', NULL, NULL, 0, 1)",
-            (pid, f"Paper {pid}"),
+            "INSERT OR IGNORE INTO papers VALUES (?, ?, '', ?, NULL, '[]', '[]', NULL, NULL, 0, 1)",
+            (pid, f"Paper {pid}", year),
         )
         conn.execute(
             "INSERT OR IGNORE INTO chunks VALUES (?, ?, ?, 'metadata', 10)",
@@ -134,6 +135,98 @@ class TestVectorSearch:
 
         assert results[0].score == pytest.approx(float(precise_score))
         assert results[0].score != round(results[0].score, 4)
+
+    def test_year_bounds_are_inclusive_and_unknown_years_are_excluded(
+        self, test_db_path, test_index_dir
+    ):
+        results = search_vector(
+            "year filter",
+            top_k=5,
+            db_path=test_db_path,
+            index_dir=test_index_dir,
+            year_from=2019,
+            year_to=2020,
+        )
+
+        assert {result.paper_id for result in results} == {"B", "C"}
+        assert all(result.year in {2019, 2020} for result in results)
+
+    def test_one_sided_year_filters(self, test_db_path, test_index_dir):
+        newer = search_vector(
+            "newer",
+            top_k=5,
+            db_path=test_db_path,
+            index_dir=test_index_dir,
+            year_from=2021,
+        )
+        older = search_vector(
+            "older",
+            top_k=5,
+            db_path=test_db_path,
+            index_dir=test_index_dir,
+            year_to=2019,
+        )
+
+        assert [result.paper_id for result in newer] == ["D"]
+        assert {result.paper_id for result in older} == {"A", "B"}
+        assert all(result.paper_id != "E" for result in [*newer, *older])
+
+    def test_year_filter_adaptively_expands_faiss_candidates(self, test_db_path):
+        import app.retrieval.vector_store as vs
+
+        class ProgressiveFakeIndex:
+            ntotal = 80
+
+            def __init__(self):
+                self.search_sizes = []
+
+            def search(self, query_vec, candidate_k):
+                self.search_sizes.append(candidate_k)
+                ids = np.arange(candidate_k, dtype=np.int64)
+                scores = 1.0 - ids.astype(np.float32) / 100.0
+                return scores[None, :], ids[None, :]
+
+        conn = sqlite3.connect(str(test_db_path))
+        try:
+            for index in range(80):
+                paper_id = f"P{index}"
+                year = 2024 if index >= 55 else 2010
+                conn.execute(
+                    "INSERT INTO papers VALUES (?, ?, '', ?, NULL, '[]', '[]', NULL, NULL, 0, 1)",
+                    (paper_id, f"Paper {index}", year),
+                )
+                conn.execute(
+                    "INSERT INTO chunks VALUES (?, ?, ?, 'metadata', 10)",
+                    (f"{paper_id}_default", paper_id, f"Text for {paper_id}"),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+
+        fake_index = ProgressiveFakeIndex()
+        vs._index = fake_index
+        vs._id_map = [
+            {
+                "faiss_id": index,
+                "chunk_id": f"P{index}_default",
+                "paper_id": f"P{index}",
+            }
+            for index in range(80)
+        ]
+        vs._model = FakeEmbeddingModel()
+
+        results = search_vector(
+            "adaptive filter",
+            top_k=3,
+            db_path=test_db_path,
+            index_dir=test_db_path,
+            year_from=2024,
+            year_to=2024,
+        )
+
+        assert fake_index.search_sizes == [50, 80]
+        assert [result.paper_id for result in results] == ["P55", "P56", "P57"]
+        assert all(result.year == 2024 for result in results)
 
     def test_missing_index(self, test_db_path):
         results = search_vector(

@@ -194,6 +194,44 @@ class TestSearchLexical:
         results = search_lexical("learning", top_k=2, db_path=test_db)
         assert len(results) <= 2
 
+    def test_year_bounds_are_inclusive(self, test_db):
+        results = search_lexical(
+            "learning",
+            top_k=5,
+            db_path=test_db,
+            year_from=2022,
+            year_to=2022,
+        )
+
+        assert [result.paper_id for result in results] == ["P4"]
+        assert results[0].year == 2022
+
+    def test_one_sided_year_filters(self, test_db):
+        newer = search_lexical(
+            "learning", top_k=5, db_path=test_db, year_from=2023
+        )
+        older = search_lexical(
+            "learning", top_k=5, db_path=test_db, year_to=2022
+        )
+
+        assert [result.paper_id for result in newer] == ["P5"]
+        assert [result.paper_id for result in older] == ["P4"]
+
+    def test_explicit_year_filter_excludes_unknown_years(self, test_db):
+        conn = sqlite3.connect(str(test_db))
+        try:
+            conn.execute("UPDATE papers SET year = NULL WHERE paper_id = 'P5'")
+            conn.commit()
+        finally:
+            conn.close()
+
+        results = search_lexical(
+            "learning", top_k=5, db_path=test_db, year_from=2000
+        )
+
+        assert [result.paper_id for result in results] == ["P4"]
+        assert all(result.year is not None for result in results)
+
     def test_empty_query(self, test_db):
         results = search_lexical("", top_k=5, db_path=test_db)
         assert results == []

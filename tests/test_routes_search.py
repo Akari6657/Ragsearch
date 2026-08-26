@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.api import routes_search
 from app.core.schemas import SearchRequest, SearchResult
@@ -76,6 +77,65 @@ def test_lexical_search_does_not_require_faiss(monkeypatch, tmp_path):
     assert response.effective_alpha is None
     assert response.total_results == 0
     assert response.results == []
+
+
+def test_search_request_rejects_reversed_year_range():
+    with pytest.raises(ValidationError, match="year_from must be less than or equal"):
+        SearchRequest(
+            query="retrieval",
+            mode="lexical",
+            year_from=2024,
+            year_to=2020,
+        )
+
+
+@pytest.mark.parametrize(
+    ("mode", "retriever_name"),
+    [
+        ("lexical", "search_lexical"),
+        ("vector", "search_vector"),
+        ("hybrid", "search_hybrid"),
+    ],
+)
+def test_search_route_forwards_year_range(
+    monkeypatch, tmp_path, mode, retriever_name
+):
+    (tmp_path / "index.faiss").write_text("fake", encoding="utf-8")
+    (tmp_path / "id_map.json").write_text("[]", encoding="utf-8")
+    observed = {}
+
+    monkeypatch.setattr(routes_search, "get_db_path", lambda: tmp_path / "metadata.sqlite")
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        routes_search,
+        "prepare_lexical_query",
+        lambda query: (query, ""),
+    )
+    monkeypatch.setattr(
+        routes_search,
+        "route_query",
+        lambda query: SimpleNamespace(should_rag=False, reason="test"),
+    )
+
+    def fake_retriever(*args, **kwargs):
+        observed.update(kwargs)
+        return []
+
+    monkeypatch.setattr(routes_search, retriever_name, fake_retriever)
+
+    response = routes_search.search_papers(
+        SearchRequest(
+            query="filtered retrieval",
+            mode=mode,
+            top_k=3,
+            year_from=2020,
+            year_to=2024,
+        )
+    )
+
+    assert observed["year_from"] == 2020
+    assert observed["year_to"] == 2024
+    assert response.total_results == 0
 
 
 def test_hybrid_search_uses_environment_alpha_when_omitted(monkeypatch, tmp_path):

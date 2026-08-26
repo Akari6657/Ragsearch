@@ -53,6 +53,7 @@ SELECT
 FROM chunk_fts c
 JOIN papers p ON c.paper_id = p.paper_id
 WHERE chunk_fts MATCH ?
+{year_clauses}
 ORDER BY score
 LIMIT ?
 """
@@ -146,6 +147,8 @@ def search_lexical(
     query: str,
     top_k: int = 10,
     db_path: str | Path = "data/indexes/metadata.sqlite",
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> list[SearchResult]:
     """Search papers by keyword using BM25-ranked FTS5 + phrase boost.
 
@@ -166,6 +169,8 @@ def search_lexical(
         query: Free-text search query. Use "..." for phrase boost.
         top_k: Number of results to return (default 10).
         db_path: Path to the metadata SQLite database.
+        year_from: Inclusive earliest publication year. Unknown years are excluded.
+        year_to: Inclusive latest publication year. Unknown years are excluded.
 
     Returns:
         List of SearchResult, ordered by relevance (best first).
@@ -190,9 +195,21 @@ def search_lexical(
             logger.warning("FTS5 index not found — run build_fts.py first")
             return []
 
-        # Fetch more candidates than needed — phrase boost will re-rank
+        # Fetch more candidates than needed — phrase boost will re-rank.
+        # Year values remain bound parameters; only fixed SQL clauses are composed.
         fetch_k = max(top_k * FETCH_MULTIPLIER, 30)
-        rows = conn.execute(SEARCH_SQL, (fts5_query, fetch_k)).fetchall()
+        year_clauses: list[str] = []
+        params: list[str | int] = [fts5_query]
+        if year_from is not None:
+            year_clauses.append("AND p.year >= ?")
+            params.append(year_from)
+        if year_to is not None:
+            year_clauses.append("AND p.year <= ?")
+            params.append(year_to)
+        params.append(fetch_k)
+
+        sql = SEARCH_SQL.format(year_clauses="\n".join(year_clauses))
+        rows = conn.execute(sql, params).fetchall()
     except sqlite3.OperationalError as exc:
         logger.error("FTS5 search failed: %s", exc)
         return []
@@ -231,9 +248,11 @@ def search_lexical(
     results = [sr for _, sr in candidates[:top_k]]
 
     logger.debug(
-        "search_lexical('%s', top_k=%d) → %d candidates → %d results (%d phrases)",
+        "search_lexical('%s', top_k=%d, years=%s..%s) → %d candidates → %d results (%d phrases)",
         query,
         top_k,
+        year_from,
+        year_to,
         len(candidates),
         len(results),
         len(phrases),

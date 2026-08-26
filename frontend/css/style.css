@@ -143,6 +143,27 @@ body {
   margin: 0;
 }
 
+/* Publication-year range */
+.year-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.year-filter input[type="number"] {
+  width: 82px;
+  height: 34px;
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.year-filter span {
+  color: var(--cite-muted);
+  font-size: 0.85rem;
+}
+
 /* Toggle row (AI Overview checkbox) */
 .toggle-row {
   display: flex;

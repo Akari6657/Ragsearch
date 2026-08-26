@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -60,8 +60,14 @@ class SearchRequest(BaseModel):
         default="lexical",
         description="Search mode — only 'lexical' is supported in v0.1",
     )
-    year_from: int | None = Field(default=None, description="Optional: earliest publication year")
-    year_to: int | None = Field(default=None, description="Optional: latest publication year")
+    year_from: int | None = Field(
+        default=None,
+        description="Optional inclusive earliest publication year",
+    )
+    year_to: int | None = Field(
+        default=None,
+        description="Optional inclusive latest publication year",
+    )
     alpha: float | None = Field(
         default=None,
         ge=0.0,
@@ -75,6 +81,17 @@ class SearchRequest(BaseModel):
         default=False,
         description="Whether to generate an AI Overview alongside search results",
     )
+
+    @model_validator(mode="after")
+    def validate_year_range(self) -> SearchRequest:
+        """Reject an inverted inclusive publication-year range."""
+        if (
+            self.year_from is not None
+            and self.year_to is not None
+            and self.year_from > self.year_to
+        ):
+            raise ValueError("year_from must be less than or equal to year_to")
+        return self
 
 
 class SearchResult(BaseModel):

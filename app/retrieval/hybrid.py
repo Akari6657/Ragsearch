@@ -64,6 +64,8 @@ def search_hybrid(
     db_path: str | Path = DEFAULT_DB,
     index_dir: str | Path = DEFAULT_INDEX_DIR,
     lexical_query: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> list[SearchResult]:
     """Combined lexical + vector search with weighted score fusion.
 
@@ -76,6 +78,8 @@ def search_hybrid(
         index_dir: Directory with FAISS index files.
         lexical_query: Optional query for the BM25 branch. Dense always uses
                        ``query``. Defaults to ``query`` for existing callers.
+        year_from: Inclusive earliest publication year for both branches.
+        year_to: Inclusive latest publication year for both branches.
 
     Returns:
         Deduplicated, merged results sorted by hybrid_score (descending).
@@ -94,8 +98,17 @@ def search_hybrid(
         effective_lexical_query,
         top_k=fetch_k,
         db_path=db_path,
+        year_from=year_from,
+        year_to=year_to,
     )
-    vector_results = search_vector(query, top_k=fetch_k, db_path=db_path, index_dir=index_dir)
+    vector_results = search_vector(
+        query,
+        top_k=fetch_k,
+        db_path=db_path,
+        index_dir=index_dir,
+        year_from=year_from,
+        year_to=year_to,
+    )
 
     if not lexical_results and not vector_results:
         return []
@@ -150,10 +163,12 @@ def search_hybrid(
     results = [r for _, r in scored[:top_k]]
 
     logger.debug(
-        "search_hybrid('%s', alpha=%.2f, lexical_expanded=%s) → %d merged from %d lex + %d vec",
+        "search_hybrid('%s', alpha=%.2f, lexical_expanded=%s, years=%s..%s) → %d merged from %d lex + %d vec",
         query,
         alpha,
         effective_lexical_query != query,
+        year_from,
+        year_to,
         len(results),
         len(lexical_results),
         len(vector_results),

@@ -146,3 +146,24 @@ class TestHybridMerge:
         search_hybrid("same query")
 
         assert observed == {"lexical": "same query", "vector": "same query"}
+
+    def test_year_range_is_forwarded_to_both_branches(self, monkeypatch):
+        observed = {}
+
+        def fake_lexical(query, **kwargs):
+            observed["lexical"] = kwargs
+            return []
+
+        def fake_vector(query, **kwargs):
+            observed["vector"] = kwargs
+            return []
+
+        monkeypatch.setattr("app.retrieval.hybrid.search_lexical", fake_lexical)
+        monkeypatch.setattr("app.retrieval.hybrid.search_vector", fake_vector)
+
+        search_hybrid("filtered query", year_from=2020, year_to=2024)
+
+        assert observed["lexical"]["year_from"] == 2020
+        assert observed["lexical"]["year_to"] == 2024
+        assert observed["vector"]["year_from"] == 2020
+        assert observed["vector"]["year_to"] == 2024
