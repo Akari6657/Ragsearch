@@ -4,7 +4,17 @@ from __future__ import annotations
 
 import sqlite3
 
-from app.core.config import DEFAULT_DB_PATH, DEFAULT_FAISS_DIR, get_db_path, get_faiss_dir
+import pytest
+
+from app.core.config import (
+    DEFAULT_DB_PATH,
+    DEFAULT_FAISS_DIR,
+    DEFAULT_HYBRID_ALPHA,
+    get_db_path,
+    get_faiss_dir,
+    get_hybrid_alpha,
+    resolve_hybrid_alpha,
+)
 from app.main import health
 
 
@@ -25,6 +35,32 @@ def test_env_paths(monkeypatch, tmp_path):
 
     assert get_db_path() == db_path
     assert get_faiss_dir() == faiss_dir
+
+
+def test_default_hybrid_alpha(monkeypatch):
+    monkeypatch.delenv("CITEQUEST_HYBRID_ALPHA", raising=False)
+
+    assert get_hybrid_alpha() == DEFAULT_HYBRID_ALPHA == 0.5
+
+
+def test_hybrid_alpha_from_environment(monkeypatch):
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "0.65")
+
+    assert get_hybrid_alpha() == 0.65
+
+
+def test_explicit_hybrid_alpha_overrides_environment(monkeypatch):
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "invalid")
+
+    assert resolve_hybrid_alpha(0.2) == 0.2
+
+
+@pytest.mark.parametrize("value", ["", "invalid", "-0.1", "1.1", "nan", "inf"])
+def test_invalid_environment_hybrid_alpha_fails_clearly(monkeypatch, value):
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", value)
+
+    with pytest.raises(ValueError, match="CITEQUEST_HYBRID_ALPHA"):
+        get_hybrid_alpha()
 
 
 def test_health_uses_env_paths(monkeypatch, tmp_path):

@@ -6,6 +6,7 @@ from app.rag.citation import extract_citations, verify_citations
 from app.rag.context_builder import build_evidence, _estimate_tokens
 from app.rag.llm_provider import MockLLMProvider, create_provider, LLMResponse
 from app.rag.prompt import build_prompts
+from app.rag.answer import _effective_hybrid_alpha
 from app.core.schemas import SearchResult
 
 
@@ -122,6 +123,18 @@ class TestBuildEvidence:
         assert "[1]" in text
         assert "[2]" not in text  # budget was hit
         assert len(cmap) == 1
+
+
+class TestRAGHybridAlpha:
+    def test_direct_rag_default_is_canonical(self):
+        assert _effective_hybrid_alpha("hybrid", None) == 0.5
+
+    def test_non_hybrid_mode_does_not_report_alpha(self):
+        assert _effective_hybrid_alpha("lexical", 0.2) is None
+
+    def test_invalid_direct_alpha_is_rejected(self):
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            _effective_hybrid_alpha("hybrid", 1.1)
 
 
 # ---------------------------------------------------------------------------

@@ -42,6 +42,11 @@ class TestNormalizeHigherIsBetter:
 
 
 class TestHybridMerge:
+    @pytest.mark.parametrize("alpha", [-0.1, 1.1, float("nan"), float("inf")])
+    def test_invalid_alpha_is_rejected(self, alpha):
+        with pytest.raises(ValueError, match="between 0 and 1"):
+            search_hybrid("test query", alpha=alpha)
+
     def test_higher_is_better_lexical_score_affects_ranking(self, monkeypatch):
         """The best public lexical score should stay best when it dominates."""
         lexical = [

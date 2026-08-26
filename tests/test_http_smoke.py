@@ -43,6 +43,7 @@ class FakeClient:
             return FakeResponse(
                 body={
                     "mode": mode,
+                    "effective_alpha": 0.5 if mode == "hybrid" else None,
                     "latency_ms": 12.5,
                     "results": [
                         {
@@ -63,6 +64,7 @@ class FakeClient:
             return FakeResponse(
                 body={
                     "answer": "Grounded answer [1].",
+                    "effective_alpha": 0.5,
                     "citations": [{"citation_id": 1}],
                     "citation_valid": True,
                     "latency_ms": 3.0,
@@ -143,6 +145,13 @@ def test_real_http_smoke_orchestration_passes_and_stops_server(tmp_path, monkeyp
     assert process.terminated is True
     assert process.kwargs["env"]["LLM_API_KEY"] == ""
     assert process.kwargs["env"]["HF_HUB_OFFLINE"] == "1"
+    assert process.kwargs["env"]["CITEQUEST_HYBRID_ALPHA"] == "0.5"
+    hybrid_request = next(
+        kwargs["json"]
+        for method, path, kwargs in client.requests
+        if method == "POST" and path == "/search" and kwargs["json"]["mode"] == "hybrid"
+    )
+    assert "alpha" not in hybrid_request
     assert client.closed is True
 
 

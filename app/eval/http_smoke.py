@@ -193,6 +193,7 @@ def run_http_smoke(
         {
             "CITEQUEST_DB_PATH": str(db_path),
             "CITEQUEST_FAISS_DIR": str(index_dir),
+            "CITEQUEST_HYBRID_ALPHA": str(alpha),
             "LLM_API_KEY": "",
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
@@ -305,22 +306,24 @@ def run_http_smoke(
                     "query": query,
                     "top_k": top_k,
                     "mode": mode,
-                    "alpha": alpha,
                     "include_overview": False,
                 },
             )
             body = _response_json(response)
             results = body.get("results", [])
             result_count = len(results) if isinstance(results, list) else 0
+            expected_alpha = alpha if mode == "hybrid" else None
             passed = (
                 response.status_code == 200
                 and body.get("mode") == mode
+                and body.get("effective_alpha") == expected_alpha
                 and result_count > 0
             )
             endpoints[f"search_{mode}"] = {
                 "passed": passed,
                 "status_code": response.status_code,
                 "result_count": result_count,
+                "effective_alpha": body.get("effective_alpha"),
                 "server_latency_ms": body.get("latency_ms"),
                 "wall_latency_ms": round(wall_ms, 3),
             }
@@ -338,7 +341,6 @@ def run_http_smoke(
                     "question": "What do the retrieved papers study?",
                     "top_k": rag_top_k,
                     "retrieval_mode": "hybrid",
-                    "alpha": alpha,
                     "pre_retrieved": hybrid_results[:rag_top_k],
                 },
             )
@@ -350,12 +352,14 @@ def run_http_smoke(
                 and bool(body.get("answer"))
                 and citation_count > 0
                 and body.get("citation_valid") is True
+                and body.get("effective_alpha") == alpha
             )
             endpoints["ask_mock_rag"] = {
                 "passed": passed,
                 "status_code": response.status_code,
                 "citation_count": citation_count,
                 "citation_valid": body.get("citation_valid"),
+                "effective_alpha": body.get("effective_alpha"),
                 "server_latency_ms": body.get("latency_ms"),
                 "wall_latency_ms": round(wall_ms, 3),
                 "external_llm_called": False,

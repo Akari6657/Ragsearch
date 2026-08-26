@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from app.eval import retrieval_eval
 from app.eval.retrieval_eval import (
     _benchmark_status,
     EvalDataError,
@@ -186,6 +187,32 @@ def test_alpha_selection_is_deterministic_and_uses_required_tie_breaks():
     ]
 
     assert select_best_alpha(sweep) == 0.5
+
+
+def test_benchmark_factory_ignores_production_alpha_environment(
+    monkeypatch, tmp_path
+):
+    observed = {}
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "0.9")
+
+    def fake_search_hybrid(query, top_k, alpha, db_path, index_dir):
+        observed.update(
+            query=query,
+            top_k=top_k,
+            alpha=alpha,
+            db_path=db_path,
+            index_dir=index_dir,
+        )
+        return []
+
+    monkeypatch.setattr(retrieval_eval, "search_hybrid", fake_search_hybrid)
+    factory = retrieval_eval._default_retriever_factory(
+        tmp_path / "metadata.sqlite", tmp_path / "faiss"
+    )
+
+    factory("hybrid", 0.2)("benchmark query", 10)
+
+    assert observed["alpha"] == 0.2
 
 
 def test_full_protocol_uses_dev_for_tuning_and_marks_small_run_as_smoke():

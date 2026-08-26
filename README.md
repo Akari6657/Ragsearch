@@ -129,8 +129,10 @@ direction, merged by chunk ID, and ranked with:
 hybrid_score = alpha * lexical_score + (1 - alpha) * dense_score
 ```
 
-The default `alpha` is `0.5`. Benchmark v1 selects a tuned value on the dev
-split only, then freezes it before test evaluation.
+The production default `alpha` is `0.5` and can be configured with
+`CITEQUEST_HYBRID_ALPHA`; an explicit API request value takes precedence, and
+responses expose the resolved `effective_alpha`. Benchmark v1 uses explicit
+frozen values, isolated from production configuration.
 
 ## Grounded RAG
 

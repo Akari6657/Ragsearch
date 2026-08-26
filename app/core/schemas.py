@@ -62,11 +62,14 @@ class SearchRequest(BaseModel):
     )
     year_from: int | None = Field(default=None, description="Optional: earliest publication year")
     year_to: int | None = Field(default=None, description="Optional: latest publication year")
-    alpha: float = Field(
-        default=0.5,
+    alpha: float | None = Field(
+        default=None,
         ge=0.0,
         le=1.0,
-        description="Hybrid weight: 0=pure semantic, 1=pure keyword, 0.5=equal (default)",
+        description=(
+            "Optional Hybrid weight: 0=pure semantic, 1=pure keyword; "
+            "when omitted, the server runtime default is used"
+        ),
     )
     include_overview: bool = Field(
         default=False,
@@ -99,6 +102,10 @@ class SearchResponse(BaseModel):
 
     query: str
     mode: str
+    effective_alpha: float | None = Field(
+        default=None,
+        description="Resolved Hybrid weight, or null when Hybrid retrieval was not used",
+    )
     total_results: int
     results: list[SearchResult]
     ai_overview: AskResponse | None = Field(default=None, description="AI-generated overview (only when requested)")
@@ -122,11 +129,13 @@ class AskRequest(BaseModel):
         default="hybrid",
         description="Search mode for evidence retrieval",
     )
-    alpha: float = Field(
-        default=0.3,
+    alpha: float | None = Field(
+        default=None,
         ge=0.0,
         le=1.0,
-        description="Hybrid weight (default 0.3 = bias toward semantic for QA)",
+        description=(
+            "Optional Hybrid weight; when omitted, the server runtime default is used"
+        ),
     )
     pre_retrieved: list[dict] | None = Field(
         default=None,
@@ -149,6 +158,10 @@ class AskResponse(BaseModel):
 
     question: str
     answer: str
+    effective_alpha: float | None = Field(
+        default=None,
+        description="Resolved Hybrid weight, or null when Hybrid retrieval was not used",
+    )
     citations: list[CitationInfo] = Field(default_factory=list)
     citation_valid: bool = True
     citation_warnings: list[str] = Field(default_factory=list)

@@ -2,10 +2,29 @@
 
 from types import SimpleNamespace
 
+import pytest
 from fastapi import HTTPException
 
 from app.api import routes_search
 from app.core.schemas import SearchRequest, SearchResult
+
+
+def _configure_hybrid_route(monkeypatch, tmp_path, observed):
+    (tmp_path / "index.faiss").write_text("fake", encoding="utf-8")
+    (tmp_path / "id_map.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(routes_search, "get_db_path", lambda: tmp_path / "metadata.sqlite")
+    monkeypatch.setattr(routes_search, "get_faiss_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        routes_search,
+        "route_query",
+        lambda query: SimpleNamespace(should_rag=False, reason="test"),
+    )
+
+    def fake_search_hybrid(*args, **kwargs):
+        observed.update(kwargs)
+        return []
+
+    monkeypatch.setattr(routes_search, "search_hybrid", fake_search_hybrid)
 
 
 def test_faiss_ready_requires_index_and_id_map(tmp_path):
@@ -54,8 +73,54 @@ def test_lexical_search_does_not_require_faiss(monkeypatch, tmp_path):
     response = routes_search.search_papers(request)
 
     assert response.mode == "lexical"
+    assert response.effective_alpha is None
     assert response.total_results == 0
     assert response.results == []
+
+
+def test_hybrid_search_uses_environment_alpha_when_omitted(monkeypatch, tmp_path):
+    observed = {}
+    _configure_hybrid_route(monkeypatch, tmp_path, observed)
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "0.65")
+
+    request = SearchRequest(query="hybrid retrieval", mode="hybrid", top_k=3)
+    response = routes_search.search_papers(request)
+
+    assert request.alpha is None
+    assert observed["alpha"] == 0.65
+    assert response.effective_alpha == 0.65
+
+
+def test_explicit_search_alpha_overrides_environment(monkeypatch, tmp_path):
+    observed = {}
+    _configure_hybrid_route(monkeypatch, tmp_path, observed)
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "0.8")
+
+    request = SearchRequest(
+        query="hybrid retrieval", mode="hybrid", top_k=3, alpha=0.2
+    )
+    response = routes_search.search_papers(request)
+
+    assert observed["alpha"] == 0.2
+    assert response.effective_alpha == 0.2
+
+
+def test_invalid_environment_alpha_returns_configuration_error(monkeypatch, tmp_path):
+    observed = {}
+    _configure_hybrid_route(monkeypatch, tmp_path, observed)
+    monkeypatch.setenv("CITEQUEST_HYBRID_ALPHA", "invalid")
+
+    with pytest.raises(HTTPException) as exc_info:
+        routes_search.search_papers(
+            SearchRequest(query="hybrid retrieval", mode="hybrid", top_k=3)
+        )
+
+    assert exc_info.value.status_code == 500
+    assert (
+        exc_info.value.detail["error_code"]
+        == "INVALID_HYBRID_ALPHA_CONFIGURATION"
+    )
+    assert observed == {}
 
 
 def test_paper_deduplication_preserves_retrieval_rank(monkeypatch, tmp_path):

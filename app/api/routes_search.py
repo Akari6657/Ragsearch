@@ -12,6 +12,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.retrieval_config import resolve_request_hybrid_alpha
 from app.core.config import get_db_path, get_faiss_dir
 from app.core.schemas import SearchRequest, SearchResponse, SearchResult
 from app.rag.router import route_query
@@ -73,6 +74,7 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             detail=f"Unknown mode '{request.mode}'. Supported: {', '.join(sorted(SUPPORTED_MODES))}.",
         )
     _require_faiss_for_mode(request.mode, index_dir)
+    effective_alpha = resolve_request_hybrid_alpha(request.mode, request.alpha)
 
     # — search ——————————————————————————————————————————————————————————
     if request.mode == "lexical":
@@ -89,10 +91,11 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             index_dir=index_dir,
         )
     else:  # hybrid
+        assert effective_alpha is not None
         results = search_hybrid(
             query=request.query,
             top_k=request.top_k,
-            alpha=request.alpha,
+            alpha=effective_alpha,
             db_path=db_path,
             index_dir=index_dir,
         )
@@ -145,7 +148,7 @@ def search_papers(request: SearchRequest) -> SearchResponse:
             pre_retrieved=rag_candidates[:n_chunks],
             top_k=n_chunks,
             retrieval_mode=request.mode,
-            alpha=request.alpha,
+            alpha=effective_alpha,
             db_path=db_path,
             index_dir=index_dir,
         )
@@ -155,9 +158,9 @@ def search_papers(request: SearchRequest) -> SearchResponse:
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     logger.info(
-        "search mode=%s alpha=%.2f overview=%s should_rag=%s query=%r → %d results in %.1f ms",
+        "search mode=%s effective_alpha=%s overview=%s should_rag=%s query=%r → %d results in %.1f ms",
         request.mode,
-        request.alpha,
+        f"{effective_alpha:.2f}" if effective_alpha is not None else "n/a",
         ai_overview is not None,
         router_result.should_rag,
         request.query,
@@ -168,6 +171,7 @@ def search_papers(request: SearchRequest) -> SearchResponse:
     return SearchResponse(
         query=request.query,
         mode=request.mode,
+        effective_alpha=effective_alpha,
         total_results=len(results),
         results=results,
         ai_overview=ai_overview,

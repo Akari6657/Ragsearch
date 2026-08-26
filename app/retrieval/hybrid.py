@@ -23,6 +23,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+from app.core.config import DEFAULT_HYBRID_ALPHA, validate_hybrid_alpha
 from app.core.schemas import SearchResult
 from app.retrieval.lexical import search_lexical
 from app.retrieval.vector_store import search_vector
@@ -59,7 +60,7 @@ def _normalize_higher_is_better(scores: list[float]) -> list[float]:
 def search_hybrid(
     query: str,
     top_k: int = 10,
-    alpha: float = 0.5,
+    alpha: float = DEFAULT_HYBRID_ALPHA,
     db_path: str | Path = DEFAULT_DB,
     index_dir: str | Path = DEFAULT_INDEX_DIR,
 ) -> list[SearchResult]:
@@ -76,6 +77,7 @@ def search_hybrid(
     Returns:
         Deduplicated, merged results sorted by hybrid_score (descending).
     """
+    alpha = validate_hybrid_alpha(alpha)
     db_path = Path(db_path)
     index_dir = Path(index_dir)
 

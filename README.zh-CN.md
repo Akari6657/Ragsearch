@@ -111,7 +111,7 @@ BM25 与 Dense 候选会按照正确的分数方向进行 min-max 归一化，�
 hybrid_score = alpha * lexical_score + (1 - alpha) * dense_score
 ```
 
-默认 `alpha` 为 `0.5`。Benchmark v1 只在 dev split 上选择最优权重，并在测试前冻结该参数。
+生产环境默认 `alpha` 为 `0.5`，可通过 `CITEQUEST_HYBRID_ALPHA` 配置；API 请求中显式提供的值优先，响应会返回最终采用的 `effective_alpha`。Benchmark v1 始终使用显式冻结值，不受生产环境配置影响。
 
 ## 引用可追溯 RAG
 
@@ -242,4 +242,3 @@ pytest tests/ -v
 2. 在选择优化方案前，判断剩余失败来自候选生成还是分数融合。
 3. 只有在相关论文已进入候选池时，才评测 reranking 或替代融合方法。
 4. 在声明 optimized v2 结果前冻结一份新的 holdout，避免使用已经观察过的 Benchmark v1 test 进行模型选择。
-

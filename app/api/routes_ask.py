@@ -12,6 +12,7 @@ import logging
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from app.api.retrieval_config import resolve_request_hybrid_alpha
 from app.core.schemas import AskRequest, AskResponse
 from app.rag.answer import answer_question, answer_question_stream
 
@@ -27,14 +28,23 @@ def ask_question(request: AskRequest) -> AskResponse:
     Evidence is retrieved via hybrid search, formatted with citation IDs,
     and sent to an LLM that answers strictly based on the provided evidence.
     """
-    logger.info("ask question=%r top_k=%d mode=%s", request.question, request.top_k, request.retrieval_mode)
+    effective_alpha = resolve_request_hybrid_alpha(
+        request.retrieval_mode, request.alpha
+    )
+    logger.info(
+        "ask question=%r top_k=%d mode=%s effective_alpha=%s",
+        request.question,
+        request.top_k,
+        request.retrieval_mode,
+        f"{effective_alpha:.2f}" if effective_alpha is not None else "n/a",
+    )
 
     return answer_question(
         question=request.question,
         pre_retrieved=request.pre_retrieved,
         top_k=request.top_k,
         retrieval_mode=request.retrieval_mode,
-        alpha=request.alpha,
+        alpha=effective_alpha,
     )
 
 
@@ -62,7 +72,16 @@ async def ask_question_stream(request: AskRequest):
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    logger.info("ask/stream question=%r top_k=%d mode=%s", request.question, request.top_k, request.retrieval_mode)
+    effective_alpha = resolve_request_hybrid_alpha(
+        request.retrieval_mode, request.alpha
+    )
+    logger.info(
+        "ask/stream question=%r top_k=%d mode=%s effective_alpha=%s",
+        request.question,
+        request.top_k,
+        request.retrieval_mode,
+        f"{effective_alpha:.2f}" if effective_alpha is not None else "n/a",
+    )
 
     return StreamingResponse(
         answer_question_stream(
@@ -70,7 +89,7 @@ async def ask_question_stream(request: AskRequest):
             pre_retrieved=request.pre_retrieved,
             top_k=request.top_k,
             retrieval_mode=request.retrieval_mode,
-            alpha=request.alpha,
+            alpha=effective_alpha,
         ),
         media_type="text/event-stream",
         headers={

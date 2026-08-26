@@ -19,7 +19,12 @@ import logging
 import time
 from pathlib import Path
 
-from app.core.config import get_db_path, get_faiss_dir
+from app.core.config import (
+    DEFAULT_HYBRID_ALPHA,
+    get_db_path,
+    get_faiss_dir,
+    validate_hybrid_alpha,
+)
 from app.core.schemas import AskRequest, AskResponse, CitationInfo, SearchResult
 from app.rag.citation import verify_citations
 from app.rag.context_builder import build_evidence
@@ -30,12 +35,24 @@ from app.retrieval.lexical import search_lexical
 
 logger = logging.getLogger(__name__)
 
+
+def _effective_hybrid_alpha(
+    retrieval_mode: str,
+    alpha: float | None,
+) -> float | None:
+    """Validate Hybrid alpha without consulting production environment config."""
+    if retrieval_mode != "hybrid":
+        return None
+    value = DEFAULT_HYBRID_ALPHA if alpha is None else alpha
+    return validate_hybrid_alpha(value)
+
+
 def answer_question(
     question: str,
     pre_retrieved: list | None = None,
     top_k: int = 8,
     retrieval_mode: str = "hybrid",
-    alpha: float = 0.3,
+    alpha: float | None = DEFAULT_HYBRID_ALPHA,
     db_path: str | Path | None = None,
     index_dir: str | Path | None = None,
 ) -> AskResponse:
@@ -62,6 +79,7 @@ def answer_question(
     t0 = time.perf_counter()
     db_path = Path(db_path) if db_path is not None else get_db_path()
     index_dir = Path(index_dir) if index_dir is not None else get_faiss_dir()
+    effective_alpha = _effective_hybrid_alpha(retrieval_mode, alpha)
 
     # — 1. Evidence: reuse pre-retrieved or do internal retrieval ———————
     if pre_retrieved is not None:
@@ -71,8 +89,9 @@ def answer_question(
     else:
         # Fallback: standalone /ask call without pre-retrieved results
         if retrieval_mode == "hybrid":
+            assert effective_alpha is not None
             results = search_hybrid(
-                question, top_k=top_k, alpha=alpha,
+                question, top_k=top_k, alpha=effective_alpha,
                 db_path=db_path, index_dir=index_dir,
             )
         elif retrieval_mode == "vector":
@@ -90,6 +109,7 @@ def answer_question(
         return AskResponse(
             question=question,
             answer="未找到相关证据，无法回答该问题。",
+            effective_alpha=effective_alpha,
             citations=[],
             citation_valid=True,
             citation_warnings=[],
@@ -133,6 +153,7 @@ def answer_question(
     return AskResponse(
         question=question,
         answer=llm_response.text,
+        effective_alpha=effective_alpha,
         citations=citations,
         citation_valid=cit_result.valid,
         citation_warnings=cit_result.warnings,
@@ -184,7 +205,7 @@ async def answer_question_stream(
     pre_retrieved: list | None = None,
     top_k: int = 8,
     retrieval_mode: str = "hybrid",
-    alpha: float = 0.3,
+    alpha: float | None = DEFAULT_HYBRID_ALPHA,
     db_path: str | Path | None = None,
     index_dir: str | Path | None = None,
 ):
@@ -203,6 +224,7 @@ async def answer_question_stream(
     t0 = time.perf_counter()
     db_path = Path(db_path) if db_path is not None else get_db_path()
     index_dir = Path(index_dir) if index_dir is not None else get_faiss_dir()
+    effective_alpha = _effective_hybrid_alpha(retrieval_mode, alpha)
 
     # ---- Phase 1: Retrieving / Organizing ----------------------------------
     if pre_retrieved is not None:
@@ -216,8 +238,9 @@ async def answer_question_stream(
 
         def _retrieve():
             if retrieval_mode == "hybrid":
+                assert effective_alpha is not None
                 r = search_hybrid(
-                    question, top_k=top_k, alpha=alpha,
+                    question, top_k=top_k, alpha=effective_alpha,
                     db_path=db_path, index_dir=index_dir,
                 )
             elif retrieval_mode == "vector":
@@ -247,6 +270,7 @@ async def answer_question_stream(
         yield _sse("result", {
             "question": question,
             "answer": "未找到相关证据，无法回答该问题。",
+            "effective_alpha": effective_alpha,
             "citations": [],
             "citation_valid": True,
             "citation_warnings": [],
@@ -295,6 +319,7 @@ async def answer_question_stream(
     yield _sse("result", {
         "question": question,
         "answer": llm_response.text,
+        "effective_alpha": effective_alpha,
         "citations": [
             {
                 "citation_id": c.citation_id,
