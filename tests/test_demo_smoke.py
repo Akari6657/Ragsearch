@@ -255,9 +255,8 @@ def test_complete_demo_smoke_uses_real_retrievers_and_mock_rag(
 
     db_path, index_dir, raw_path, paper_count = _build_demo_artifacts(tmp_path)
     monkeypatch.setattr(vector_store, "EmbeddingModel", TinyEmbeddingModel)
-    monkeypatch.setattr(vector_store, "_index", None)
-    monkeypatch.setattr(vector_store, "_id_map", [])
-    monkeypatch.setattr(vector_store, "_model", None)
+    monkeypatch.setattr(vector_store, "_index_cache", None)
+    monkeypatch.setattr(vector_store, "_model_cache", None)
 
     report = run_demo_smoke(
         db_path=db_path,

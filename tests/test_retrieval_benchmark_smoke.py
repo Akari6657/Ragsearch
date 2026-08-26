@@ -27,6 +27,11 @@ def _encode(texts):
 
 
 class TinyEmbeddingModel:
+    dim = len(CONCEPTS)
+
+    def __init__(self, *args, **kwargs):
+        pass
+
     def encode(self, texts, *, show_progress=False, **kwargs):
         return _encode(texts)
 
@@ -106,9 +111,8 @@ def test_end_to_end_retrieval_benchmark_smoke(tmp_path, monkeypatch):
 
     db_path, index_dir = _build_smoke_artifacts(tmp_path)
     monkeypatch.setattr(vector_store, "EmbeddingModel", TinyEmbeddingModel)
-    monkeypatch.setattr(vector_store, "_index", None)
-    monkeypatch.setattr(vector_store, "_id_map", [])
-    monkeypatch.setattr(vector_store, "_model", None)
+    monkeypatch.setattr(vector_store, "_index_cache", None)
+    monkeypatch.setattr(vector_store, "_model_cache", None)
 
     queries = [
         EvalQuery("q0001", "retrieval grounding", "keyword", "dev", ("P1",)),
@@ -160,4 +164,3 @@ def test_end_to_end_retrieval_benchmark_smoke(tmp_path, monkeypatch):
     assert result["test_results"]["dense"]["metrics"]["hit_rate@10"] == 1.0
     assert manifest_path.exists() and json_path.exists() and markdown_path.exists()
     assert "Smoke / Development Run" in markdown_path.read_text(encoding="utf-8")
-
