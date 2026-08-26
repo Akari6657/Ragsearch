@@ -51,24 +51,6 @@ def _normalize_higher_is_better(scores: list[float]) -> list[float]:
     return [(s - mn) / (mx - mn) for s in scores]
 
 
-def _normalize_lower_is_better(scores: list[float]) -> list[float]:
-    """Normalize scores where smaller values are more relevant.
-
-    SQLite FTS5 bm25() returns lower scores for better matches, often as
-    negative values.  This maps the smallest score to 1.0 and the largest
-    score to 0.0 so it can be fused with higher-is-better vector scores.
-    """
-    if not scores:
-        return []
-
-    mn = min(scores)
-    mx = max(scores)
-    if mx == mn:
-        return [0.5] * len(scores)
-
-    return [(mx - s) / (mx - mn) for s in scores]
-
-
 # ---------------------------------------------------------------------------
 # Hybrid search
 # ---------------------------------------------------------------------------
@@ -112,7 +94,7 @@ def search_hybrid(
     lex_scores = [r.score for r in lexical_results]
     vec_scores = [r.score for r in vector_results]
 
-    lex_norm = _normalize_lower_is_better(lex_scores)
+    lex_norm = _normalize_higher_is_better(lex_scores)
     vec_norm = _normalize_higher_is_better(vec_scores)
 
     # — Merge by chunk_id ——————————————————————————————————————————————
@@ -150,7 +132,7 @@ def search_hybrid(
         hybrid_score = alpha * entry["lex_norm"] + (1 - alpha) * entry["vec_norm"]
         r = entry["result"]
         # Use the hybrid score for output ordering
-        r.score = round(hybrid_score, 4)
+        r.score = hybrid_score
         scored.append((hybrid_score, r))
 
     # — Sort and truncate ——————————————————————————————————————————————

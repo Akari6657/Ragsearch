@@ -199,7 +199,7 @@ def search_vector(
                 year=m.get("year"),
                 venue=m.get("venue"),
                 authors=m.get("authors", []),
-                score=round(h["score"], 4),
+                score=h["score"],
                 snippet="",  # FAISS has no snippet; hybrid layer can fill from lexical
                 abstract=m.get("abstract", ""),
             )

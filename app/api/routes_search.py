@@ -13,7 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from app.core.config import get_db_path, get_faiss_dir
-from app.core.schemas import SearchRequest, SearchResponse
+from app.core.schemas import SearchRequest, SearchResponse, SearchResult
 from app.rag.router import route_query
 from app.rag.answer import answer_question
 from app.rag.rewriter import rewrite_query, detect_language
@@ -117,15 +117,14 @@ def search_papers(request: SearchRequest) -> SearchResponse:
     # — Save chunk-level results for RAG (before paper-level dedup) ——
     rag_candidates = list(results)
 
-    # — Dedup: keep highest-score chunk per paper_id (for display) ————
-    seen: dict[str, int] = {}
-    deduped: list = []
+    # — Dedup: preserve the highest-ranked chunk for each paper ———————
+    seen_paper_ids: set[str] = set()
+    deduped: list[SearchResult] = []
     for r in results:
-        if r.paper_id not in seen:
-            seen[r.paper_id] = len(deduped)
-            deduped.append(r)
-        elif r.score > deduped[seen[r.paper_id]].score:
-            deduped[seen[r.paper_id]] = r
+        if r.paper_id in seen_paper_ids:
+            continue
+        seen_paper_ids.add(r.paper_id)
+        deduped.append(r)
     results = deduped
 
     # — Snippet: always use abstract preview ——————————————————————————

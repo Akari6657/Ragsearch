@@ -83,7 +83,13 @@ class SearchResult(BaseModel):
     year: int | None
     venue: str | None
     authors: list[str] = Field(default_factory=list)
-    score: float = Field(..., description="Relevance score (higher is better)")
+    score: float = Field(
+        ...,
+        description=(
+            "Retriever-specific relevance score (higher is better within the "
+            "returned ranking; not calibrated across modes or queries)"
+        ),
+    )
     snippet: str = Field(default="", description="Relevant text excerpt from the chunk")
     abstract: str = Field(default="", description="Paper abstract (first ~300 chars)")
 

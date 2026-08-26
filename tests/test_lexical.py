@@ -153,6 +153,16 @@ class TestSearchLexical:
         assert len(results) >= 1
         assert results[0].paper_id == "P1"
 
+    def test_public_scores_are_higher_is_better(self, test_db):
+        results = search_lexical(
+            "neural graph learning", top_k=5, db_path=test_db
+        )
+        scores = [result.score for result in results]
+
+        assert len(scores) >= 2
+        assert all(score >= 0.0 for score in scores)
+        assert scores == sorted(scores, reverse=True)
+
     def test_sentence_punctuation_does_not_break_search(self, test_db):
         results = search_lexical(
             "Neural networks, image recognition.", top_k=5, db_path=test_db

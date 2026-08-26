@@ -110,6 +110,31 @@ class TestVectorSearch:
         )
         assert len(results) == 2
 
+    def test_score_keeps_faiss_precision(self, test_db_path, test_index_dir):
+        import app.retrieval.vector_store as vs
+
+        precise_score = np.float32(0.12345679)
+
+        class PreciseFakeIndex:
+            def search(self, query_vec, top_k):
+                return (
+                    np.asarray([[precise_score]], dtype=np.float32),
+                    np.asarray([[0]], dtype=np.int64),
+                )
+
+        vs._index = PreciseFakeIndex()
+        vs._id_map = [
+            {"faiss_id": 0, "chunk_id": "A_default", "paper_id": "A"}
+        ]
+        vs._model = FakeEmbeddingModel()
+
+        results = search_vector(
+            "precise score", top_k=1, db_path=test_db_path, index_dir=test_index_dir
+        )
+
+        assert results[0].score == pytest.approx(float(precise_score))
+        assert results[0].score != round(results[0].score, 4)
+
     def test_missing_index(self, test_db_path):
         results = search_vector(
             "test", top_k=5, db_path=test_db_path, index_dir="/nonexistent"

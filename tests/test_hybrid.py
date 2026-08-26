@@ -5,7 +5,6 @@ import pytest
 from app.core.schemas import SearchResult
 from app.retrieval.hybrid import (
     _normalize_higher_is_better,
-    _normalize_lower_is_better,
     search_hybrid,
 )
 
@@ -42,29 +41,12 @@ class TestNormalizeHigherIsBetter:
         assert norm == [0.5]
 
 
-class TestNormalizeLowerIsBetter:
-    def test_bm25_direction(self):
-        """SQLite FTS5 bm25 scores are lower-is-better."""
-        scores = [-20.0, -10.0, -2.0]
-        norm = _normalize_lower_is_better(scores)
-        assert norm[0] == 1.0
-        assert norm[1] == pytest.approx(0.4444, abs=1e-4)
-        assert norm[2] == 0.0
-
-    def test_identical(self):
-        norm = _normalize_lower_is_better([-5.0, -5.0, -5.0])
-        assert norm == [0.5, 0.5, 0.5]
-
-    def test_empty(self):
-        assert _normalize_lower_is_better([]) == []
-
-
 class TestHybridMerge:
-    def test_lexical_bm25_direction_affects_ranking(self, monkeypatch):
-        """The best BM25 hit should stay best when lexical weight dominates."""
+    def test_higher_is_better_lexical_score_affects_ranking(self, monkeypatch):
+        """The best public lexical score should stay best when it dominates."""
         lexical = [
-            _result("A_chunk", "A", -20.0),  # best lexical
-            _result("B_chunk", "B", -2.0),   # worst lexical
+            _result("A_chunk", "A", 20.0),  # best lexical
+            _result("B_chunk", "B", 2.0),   # worst lexical
         ]
         vector = [
             _result("B_chunk", "B", 0.9),    # best vector
@@ -82,8 +64,8 @@ class TestHybridMerge:
 
     def test_alpha_zero_uses_vector_scores(self, monkeypatch):
         lexical = [
-            _result("A_chunk", "A", -20.0),
-            _result("B_chunk", "B", -2.0),
+            _result("A_chunk", "A", 20.0),
+            _result("B_chunk", "B", 2.0),
         ]
         vector = [
             _result("B_chunk", "B", 0.9),
@@ -96,3 +78,24 @@ class TestHybridMerge:
         results = search_hybrid("test query", top_k=3, alpha=0.0)
 
         assert [r.chunk_id for r in results] == ["B_chunk", "A_chunk", "C_chunk"]
+
+    def test_hybrid_score_keeps_full_precision(self, monkeypatch):
+        lexical = [
+            _result("A_chunk", "A", 3.0),
+            _result("B_chunk", "B", 2.0),
+            _result("C_chunk", "C", 1.0),
+        ]
+        vector = [
+            _result("C_chunk", "C", 0.3),
+            _result("B_chunk", "B", 0.2),
+            _result("A_chunk", "A", 0.1),
+        ]
+
+        monkeypatch.setattr("app.retrieval.hybrid.search_lexical", lambda *a, **k: lexical)
+        monkeypatch.setattr("app.retrieval.hybrid.search_vector", lambda *a, **k: vector)
+
+        results = search_hybrid("test query", top_k=3, alpha=1 / 3)
+
+        assert [r.chunk_id for r in results] == ["C_chunk", "B_chunk", "A_chunk"]
+        assert results[0].score == pytest.approx(2 / 3)
+        assert results[0].score != round(results[0].score, 4)

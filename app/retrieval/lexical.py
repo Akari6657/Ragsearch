@@ -153,8 +153,9 @@ def search_lexical(
     1. Parse query into OR terms + quoted phrases.
     2. FTS5 OR search fetches top_k * N candidates.
     3. Count phrase hits in each candidate's chunk_text.
-    4. Apply phrase boost: score *= (1 + c * ln(1 + phrase_count)).
-    5. Re-sort and return top_k.
+    4. Apply phrase boost to the raw lower-is-better FTS5 score.
+    5. Negate it at the module boundary so public scores are higher-is-better.
+    6. Re-sort and return top_k.
 
     Example: 'computer "neural network" optimization'
         → OR(computer, neural, network, optimization) via FTS5 BM25
@@ -209,7 +210,8 @@ def search_lexical(
         boost = _phrase_boost(phrase_count)
 
         raw_score = float(row["score"])
-        boosted_score = raw_score * boost
+        boosted_raw_score = raw_score * boost
+        relevance_score = -boosted_raw_score
 
         sr = SearchResult(
             paper_id=row["paper_id"],
@@ -218,14 +220,14 @@ def search_lexical(
             year=row["year"],
             venue=row["venue"],
             authors=_parse_authors(row["authors_json"]),
-            score=round(boosted_score, 4),
+            score=relevance_score,
             snippet=snippet,
             abstract=(row["abstract"] or "")[:300],
         )
-        candidates.append((boosted_score, sr))
+        candidates.append((relevance_score, sr))
 
-    # — Re-sort by boosted score and truncate ——————————————————————————
-    candidates.sort(key=lambda x: x[0])  # BM25: lower (more negative) = better
+    # — Re-sort by public relevance score and truncate ————————————————
+    candidates.sort(key=lambda x: x[0], reverse=True)
     results = [sr for _, sr in candidates[:top_k]]
 
     logger.debug(
