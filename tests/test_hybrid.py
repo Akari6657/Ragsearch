@@ -5,6 +5,7 @@ import pytest
 from app.core.schemas import SearchResult
 from app.retrieval.hybrid import (
     _normalize_higher_is_better,
+    fuse_minmax_results,
     search_hybrid,
 )
 
@@ -66,6 +67,46 @@ class TestHybridMerge:
         assert [r.chunk_id for r in results] == ["A_chunk", "B_chunk", "C_chunk"]
         assert results[0].score == pytest.approx(0.7)
         assert results[1].score == pytest.approx(0.3)
+
+    def test_pure_fusion_preserves_inputs_and_existing_ranking(self):
+        lexical = [
+            _result("A_chunk", "A", 20.0),
+            _result("B_chunk", "B", 2.0),
+        ]
+        vector = [
+            _result("B_chunk", "B", 0.9).model_copy(
+                update={"snippet": "dense fallback"}
+            ),
+            _result("C_chunk", "C", 0.1),
+        ]
+        lexical_before = [result.model_dump() for result in lexical]
+        vector_before = [result.model_dump() for result in vector]
+
+        results = fuse_minmax_results(lexical, vector, top_k=3, alpha=0.7)
+
+        assert [result.chunk_id for result in results] == [
+            "A_chunk",
+            "B_chunk",
+            "C_chunk",
+        ]
+        assert [result.score for result in results] == pytest.approx([0.7, 0.3, 0.0])
+        assert results[1].snippet == "dense fallback"
+        assert [result.model_dump() for result in lexical] == lexical_before
+        assert [result.model_dump() for result in vector] == vector_before
+        assert all(
+            fused is not source
+            for fused in results
+            for source in (*lexical, *vector)
+            if fused.chunk_id == source.chunk_id
+        )
+
+    def test_pure_fusion_preserves_lexical_first_ties(self):
+        lexical = [_result("B_chunk", "B", 1.0)]
+        vector = [_result("A_chunk", "A", 1.0)]
+
+        results = fuse_minmax_results(lexical, vector, top_k=2, alpha=0.5)
+
+        assert [result.chunk_id for result in results] == ["B_chunk", "A_chunk"]
 
     def test_alpha_zero_uses_vector_scores(self, monkeypatch):
         lexical = [

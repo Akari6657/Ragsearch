@@ -7,6 +7,7 @@ import sqlite3
 
 import numpy as np
 
+from app.eval.fusion_experiment import run_fusion_comparison
 from app.eval.retrieval_eval import EvalQuery, run_benchmark, write_benchmark_outputs
 
 
@@ -164,3 +165,72 @@ def test_end_to_end_retrieval_benchmark_smoke(tmp_path, monkeypatch):
     assert result["test_results"]["dense"]["metrics"]["hit_rate@10"] == 1.0
     assert manifest_path.exists() and json_path.exists() and markdown_path.exists()
     assert "Smoke / Development Run" in markdown_path.read_text(encoding="utf-8")
+
+
+def test_end_to_end_fusion_comparison_six_query_smoke(tmp_path, monkeypatch):
+    import app.retrieval.vector_store as vector_store
+    from app.retrieval.lexical import search_lexical
+    from app.retrieval.vector_store import search_vector
+
+    db_path, index_dir = _build_smoke_artifacts(tmp_path)
+    monkeypatch.setattr(vector_store, "EmbeddingModel", TinyEmbeddingModel)
+    monkeypatch.setattr(vector_store, "_index_cache", None)
+    monkeypatch.setattr(vector_store, "_model_cache", None)
+
+    queries = [
+        EvalQuery("q0001", "retrieval grounding", "keyword", "dev", ("P1",)),
+        EvalQuery(
+            "q0002",
+            "How can vision models detect objects?",
+            "natural_question",
+            "dev",
+            ("P2",),
+        ),
+        EvalQuery(
+            "q0003",
+            "program synthesis using runtime results",
+            "semantic_paraphrase",
+            "dev",
+            ("P3",),
+        ),
+        EvalQuery("q0004", "database optimization", "keyword", "dev", ("P4",)),
+        EvalQuery(
+            "q0005",
+            "How are graph representations learned?",
+            "natural_question",
+            "dev",
+            ("P5",),
+        ),
+        EvalQuery(
+            "q0006",
+            "policy learning for autonomous control",
+            "semantic_paraphrase",
+            "dev",
+            ("P6",),
+        ),
+    ]
+
+    report = run_fusion_comparison(
+        queries,
+        lambda query, top_k: search_lexical(
+            query,
+            top_k=top_k,
+            db_path=db_path,
+        ),
+        lambda query, top_k: search_vector(
+            query,
+            top_k=top_k,
+            db_path=db_path,
+            index_dir=index_dir,
+        ),
+    )
+
+    assert report["status"] == "smoke_or_development"
+    assert report["query_count"] == 6
+    assert report["protocol"]["candidate_depth"] == 20
+    assert report["protocol"]["final_top_k"] == 10
+    assert len(report["candidate_audit"]) == 6
+    assert report["methods"]["minmax"]["metrics"]["query_count"] == 6
+    assert report["methods"]["rrf"]["metrics"]["query_count"] == 6
+    pairwise = report["pairwise_first_relevant_rank"]
+    assert pairwise["minmax_wins"] + pairwise["rrf_wins"] + pairwise["ties"] == 6

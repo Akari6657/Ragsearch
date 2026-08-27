@@ -21,6 +21,8 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from app.core.config import DEFAULT_HYBRID_ALPHA, validate_hybrid_alpha
@@ -50,6 +52,79 @@ def _normalize_higher_is_better(scores: list[float]) -> list[float]:
         return [0.5] * len(scores)
 
     return [(s - mn) / (mx - mn) for s in scores]
+
+
+@dataclass
+class _MinMaxCandidate:
+    """One merged candidate while preserving its source result."""
+
+    result: SearchResult
+    lexical_normalized: float = 0.0
+    vector_normalized: float = 0.0
+    snippet: str = ""
+
+
+def fuse_minmax_results(
+    lexical_results: Sequence[SearchResult],
+    vector_results: Sequence[SearchResult],
+    *,
+    top_k: int = 10,
+    alpha: float = DEFAULT_HYBRID_ALPHA,
+) -> list[SearchResult]:
+    """Fuse pre-retrieved candidates without mutating either input ranking.
+
+    The merge order and tie behavior intentionally match the original Hybrid
+    implementation: lexical candidates establish insertion order, followed by
+    vector-only candidates, and Python's stable sort preserves that order when
+    fused scores are equal.
+    """
+    alpha = validate_hybrid_alpha(alpha)
+    if not lexical_results and not vector_results:
+        return []
+
+    lexical_normalized = _normalize_higher_is_better(
+        [result.score for result in lexical_results]
+    )
+    vector_normalized = _normalize_higher_is_better(
+        [result.score for result in vector_results]
+    )
+
+    merged: dict[str, _MinMaxCandidate] = {}
+    for result, normalized in zip(lexical_results, lexical_normalized):
+        merged[result.chunk_id] = _MinMaxCandidate(
+            result=result,
+            lexical_normalized=normalized,
+            snippet=result.snippet,
+        )
+
+    for result, normalized in zip(vector_results, vector_normalized):
+        candidate = merged.get(result.chunk_id)
+        if candidate is None:
+            merged[result.chunk_id] = _MinMaxCandidate(
+                result=result,
+                vector_normalized=normalized,
+                snippet=result.snippet,
+            )
+            continue
+
+        candidate.vector_normalized = normalized
+        if not candidate.snippet and result.snippet:
+            candidate.snippet = result.snippet
+
+    scored: list[tuple[float, SearchResult]] = []
+    for candidate in merged.values():
+        hybrid_score = (
+            alpha * candidate.lexical_normalized
+            + (1 - alpha) * candidate.vector_normalized
+        )
+        updates: dict[str, object] = {"score": hybrid_score}
+        if candidate.snippet != candidate.result.snippet:
+            updates["snippet"] = candidate.snippet
+        fused_result = candidate.result.model_copy(update=updates)
+        scored.append((hybrid_score, fused_result))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [result for _, result in scored[:top_k]]
 
 
 # ---------------------------------------------------------------------------
@@ -110,57 +185,12 @@ def search_hybrid(
         year_to=year_to,
     )
 
-    if not lexical_results and not vector_results:
-        return []
-
-    # — Normalize scores separately ————————————————————————————————————
-    lex_scores = [r.score for r in lexical_results]
-    vec_scores = [r.score for r in vector_results]
-
-    lex_norm = _normalize_higher_is_better(lex_scores)
-    vec_norm = _normalize_higher_is_better(vec_scores)
-
-    # — Merge by chunk_id ——————————————————————————————————————————————
-    merged: dict[str, dict] = {}  # chunk_id → {lex_norm, vec_norm, result}
-
-    for r, norm in zip(lexical_results, lex_norm):
-        merged[r.chunk_id] = {
-            "lex_norm": norm,
-            "vec_norm": 0.0,
-            "result": r,
-            "lex_score": r.score,
-            "vec_score": 0.0,
-        }
-
-    for r, norm in zip(vector_results, vec_norm):
-        if r.chunk_id in merged:
-            # Both retrievers found this chunk — combine
-            merged[r.chunk_id]["vec_norm"] = norm
-            merged[r.chunk_id]["vec_score"] = r.score
-            # Carry over snippet from lexical if available
-            if not merged[r.chunk_id]["result"].snippet and r.snippet:
-                merged[r.chunk_id]["result"].snippet = r.snippet
-        else:
-            merged[r.chunk_id] = {
-                "lex_norm": 0.0,
-                "vec_norm": norm,
-                "result": r,
-                "lex_score": 0.0,
-                "vec_score": r.score,
-            }
-
-    # — Compute hybrid scores ——————————————————————————————————————————
-    scored: list[tuple[float, SearchResult]] = []
-    for entry in merged.values():
-        hybrid_score = alpha * entry["lex_norm"] + (1 - alpha) * entry["vec_norm"]
-        r = entry["result"]
-        # Use the hybrid score for output ordering
-        r.score = hybrid_score
-        scored.append((hybrid_score, r))
-
-    # — Sort and truncate ——————————————————————————————————————————————
-    scored.sort(key=lambda x: x[0], reverse=True)
-    results = [r for _, r in scored[:top_k]]
+    results = fuse_minmax_results(
+        lexical_results,
+        vector_results,
+        top_k=top_k,
+        alpha=alpha,
+    )
 
     logger.debug(
         "search_hybrid('%s', alpha=%.2f, lexical_expanded=%s, years=%s..%s) → %d merged from %d lex + %d vec",
