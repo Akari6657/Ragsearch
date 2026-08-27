@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "citequest-rag"
 version = "0.1.0"
-description = "Academic search + citation-grounded RAG + lightweight research agent"
+description = "Local-first hybrid academic search and citation-grounded RAG with reproducible retrieval evaluation"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
