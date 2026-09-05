@@ -1,39 +1,61 @@
-# CiteQuest-RAG
+# CiteQuest
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+**学术论文检索与引用问答。**
 
-**Local-first hybrid academic search with citation-grounded answers.**
+输入关键词查找论文，或用自然语言提问，让系统结合检索到的论文摘要生成回答，并附上引用来源。支持中文查询、关键词与语义混合检索，以及发表年份筛选。
 
-CiteQuest-RAG is an end-to-end AI application for searching scientific papers
-and answering research questions with traceable evidence. It combines lexical
-retrieval, dense retrieval, score-fusion hybrid search, query understanding,
-and citation-aware RAG behind a FastAPI service and a lightweight search UI.
+这是一个个人 AI 应用项目，覆盖数据处理、索引构建、检索、RAG、API、前端和评测。论文与索引存放在本地，生成回答通过 OpenAI 兼容接口调用模型。
 
-The project is intentionally more than an LLM wrapper: papers are ingested and
-indexed locally, every generated answer is tied to retrieved chunks, and the
-retrieval stack is evaluated independently from the LLM.
+[运行效果](#运行效果) · [工作流程](#工作流程) · [检索效果](#检索效果) · [本地运行](#本地运行)
 
-> **Status:** the end-to-end product pipeline and official Retrieval Benchmark
-> v1 are complete. On the frozen 100-query test split over 50,000 papers,
-> Hybrid retrieval achieved 95% HitRate@10 and 0.8881 nDCG@10.
+## 运行效果
 
-## Highlights
+搜索结果先返回，AI Overview 随后显示回答和编号引用；展开来源可以查看论文标题并跳转到原文。
 
-| Capability | Implementation |
-|---|---|
-| Hybrid academic search | SQLite FTS5 BM25, BGE-M3 embeddings, FAISS IVF, and weighted score fusion |
-| Citation-grounded RAG | Evidence budgeting, numbered citations, citation metadata, and validity checks |
-| Query understanding | Rule-first RAG routing with an LLM fallback for ambiguous requests |
-| Chinese query support | Bounded, failure-safe English keyword expansion integrated into BM25 and Hybrid ranking |
-| Reproducible indexing | Local SQLite and FAISS artifacts with resumable, disk-backed embedding builds |
-| Evaluation-first workflow | Frozen dev/test protocol, paper-level metrics, latency reporting, and deterministic error groups |
-| Runnable application | FastAPI endpoints, SSE progress streaming, health checks, and a browser search interface |
-| Automated verification | 223 unit, integration, and end-to-end smoke tests |
+![CiteQuest 引用问答：中文问题、AI 回答、引用来源与论文结果](docs/images/ask-demo.png)
 
-## Quickstart
+<details>
+<summary>查看论文检索界面</summary>
 
-Python 3.11 or newer is required. Corpora and generated indexes are local build
-artifacts and are intentionally not included in the repository.
+![CiteQuest 混合检索：检索模式、年份筛选与论文摘要](docs/images/search-demo.png)
+
+</details>
+
+以上截图来自本地 50,000 篇 arXiv CS 论文的索引，使用 Hybrid 检索与 DeepSeek 生成回答。截图展示应用交互，检索质量以[冻结测试集的评测报告](reports/retrieval_baseline_v1.md)为准。
+
+## 工作流程
+
+![CiteQuest 主流程：关键词与语义检索融合后返回论文，并按需生成引用问答](docs/images/architecture.svg)
+
+索引构建时，将论文标题与摘要整理为文本块，写入 SQLite FTS5，并用 BGE-M3 生成向量、构建 FAISS 索引。上图展示默认 Hybrid 模式；也可以单独使用关键词检索或语义检索。
+
+- **混合检索**：BM25 与 Dense 分别召回候选，经过 min-max 分数归一化后加权融合。默认两路权重各为 `0.5`，可通过请求参数或环境变量调整。
+- **中文查询**：为关键词分支补充英文检索词，向量分支保留原始问题。改写有 2 秒预算，失败时回退到原查询。
+- **引用问答**：路由器判断是否需要生成回答；需要时复用检索结果，按预算组织摘要证据，交给 LLM，再检查回答中的 `[N]` 是否对应本轮来源。
+
+前端通过 SSE 接收处理阶段和最终回答。索引构建支持批次检查点，长时间的向量生成任务可以在中断后恢复。
+
+## 检索效果
+
+在 **50,000 篇 arXiv CS 论文、100 条冻结测试查询**上，对比三种检索方式：
+
+| 方法 | HitRate@10 | MRR@10 | nDCG@10 | 检索耗时 p50 |
+| --- | ---: | ---: | ---: | ---: |
+| BM25 | 90% | 0.8093 | 0.8315 | 162 ms |
+| BGE-M3 Dense | 91% | 0.7951 | 0.8233 | 21 ms |
+| **Hybrid** | **95%** | **0.8673** | **0.8881** | 203 ms |
+
+Hybrid 的 HitRate@10 比最佳单路检索提高 **4 个百分点**。融合权重由另外 50 条 dev 查询选择，最终为 `0.5`；测试集不参与选参。表中耗时为原实验环境下的热查询检索耗时，不包含 LLM 生成。
+
+查询由目标论文的标题和摘要生成，属于 **synthetic known-item 检索评测**：HitRate@10 衡量目标论文是否进入前十，不能代表问答准确率或任意真实问题的效果。完整协议、查询类型拆分和失败案例见 [Benchmark v1 报告](reports/retrieval_baseline_v1.md)。
+
+后续已在 dev 集开展 RRF 融合对比、候选召回与融合损失归因，以及 FAISS 近似检索诊断；当前检索配置仍保留 min-max 融合。
+
+## 本地运行
+
+需要 Python 3.11+。首次运行需要下载 BGE-M3 模型并构建索引；语料、模型与索引均不随仓库分发。下面使用 1,000 篇论文准备一个较小的演示环境。
+
+### 1. 安装依赖
 
 ```bash
 git clone https://github.com/Akari6657/Ragsearch.git
@@ -42,261 +64,90 @@ cd Ragsearch
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[all]" arxiv python-dotenv
-
-# Download a small arXiv CS corpus.
-python scripts/download_arxiv.py \
-  --size 1000 \
-  --output data/raw/arxiv_cs_demo_1000.jsonl
-
-# Build SQLite metadata, FTS5, and FAISS indexes.
-python scripts/build_metadata_db.py \
-  --input data/raw/arxiv_cs_demo_1000.jsonl \
-  --db data/indexes/demo/metadata.sqlite \
-  --overwrite
-python scripts/build_fts.py --db data/indexes/demo/metadata.sqlite
-python scripts/build_faiss.py \
-  --db data/indexes/demo/metadata.sqlite \
-  --output-dir data/indexes/demo/faiss \
-  --batch-size 8
-
-# Point the API at the demo artifacts.
-CITEQUEST_DB_PATH=data/indexes/demo/metadata.sqlite \
-CITEQUEST_FAISS_DIR=data/indexes/demo/faiss \
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000`. Search works without an LLM key. For real RAG
-generation, copy `.env.example` to `.env` and configure an OpenAI-compatible
-endpoint, model, and API key.
-
-## How It Works
-
-```mermaid
-flowchart TD
-    Q[User query] --> M{Retrieval mode}
-    M -->|Lexical| L[Prepare lexical query]
-    M -->|Vector| D[BGE-M3 + FAISS]
-    M -->|Hybrid| L
-    M -->|Hybrid| Y[Dense: original query]
-
-    L --> Z{Chinese + LLM configured?}
-    Z -->|No| B[SQLite FTS5 BM25: original query]
-    Z -->|Yes| W[Bounded English keyword rewrite]
-    W -->|Success| X[BM25: original + English keywords]
-    W -->|Timeout / invalid / error| B
-    X --> H[BM25 + Dense score fusion]
-    B --> H
-    Y --> H
-
-    B --> C[Retrieved chunks]
-    D --> C
-    H --> C
-    X --> C
-    C --> P[Paper-level search results]
-
-    Q --> R{AI Overview needed?}
-    R -->|Yes| E[Build bounded evidence context]
-    C --> E
-    E --> L[OpenAI-compatible LLM]
-    L --> V[Citation verification]
-    V --> A[Grounded answer + sources]
-```
-
-For Chinese lexical and Hybrid requests, a valid English rewrite is combined
-with the original query before one BM25 ranking is produced. Dense retrieval
-always receives the original query. Rewrite is skipped without a real API key
-and falls back to the unchanged query on timeout, provider error, or invalid
-output; its default time budget is two seconds and is configurable with
-`CITEQUEST_REWRITE_TIMEOUT_SECONDS`. Vector-only search never calls rewrite.
-The official retrieval benchmark bypasses rewriting, routing, and RAG so every
-baseline receives the same frozen query.
-
-## Retrieval Stack
-
-### BM25
-
-- SQLite FTS5 provides a compact, local lexical index.
-- Multi-term queries use explicit OR semantics for broad academic recall.
-- Quoted phrases are detected and receive a post-retrieval phrase boost.
-- Candidate over-fetching allows phrase-boosted results to be reranked before
-  the final `top_k` is returned.
-
-### Dense Retrieval
-
-- `BAAI/bge-m3` encodes queries and title/abstract chunks into 1024-dimensional
-  normalized vectors.
-- FAISS IVF performs local approximate nearest-neighbor search with cosine
-  similarity implemented as inner product.
-- Index construction writes durable batch checkpoints, so long embedding jobs
-  can resume after interruption.
-
-### Hybrid Retrieval
-
-BM25 and Dense candidates are min-max normalized with the correct score
-direction, merged by chunk ID, and ranked with:
-
-```text
-hybrid_score = alpha * lexical_score + (1 - alpha) * dense_score
-```
-
-The production default `alpha` is `0.5` and can be configured with
-`CITEQUEST_HYBRID_ALPHA`; an explicit API request value takes precedence, and
-responses expose the resolved `effective_alpha`. Benchmark v1 uses explicit
-frozen values, isolated from production configuration.
-
-For an expanded Chinese Hybrid query, the lexical branch receives the original
-text plus validated English keywords while the Dense branch receives the
-original text. Both candidate lists then use the same normalization and fusion
-path as ordinary Hybrid retrieval.
-
-## Grounded RAG
-
-Search results and generated answers remain inspectable as separate outputs.
-When an AI Overview is requested:
-
-1. A rule-first router decides whether the query benefits from synthesis.
-2. Pre-retrieved chunks are reused instead of silently running a second search.
-3. The context builder assigns stable citation IDs within a token budget.
-4. An OpenAI-compatible LLM answers only from the supplied evidence.
-5. Citation markers such as `[1]` are checked against the evidence set and
-   returned with source metadata.
-
-Unit tests use a mock provider, so the test suite never depends on a paid API.
-
-## Retrieval Benchmark v1
-
-Benchmark v1 establishes a controlled retrieval baseline before adding
-rerankers, HyDE, multi-hop retrieval, MCP integrations, or Agent workflows.
-
-| Item | Protocol |
-|---|---|
-| Corpus | Exactly 50,000 category-balanced arXiv computer-science papers |
-| Search text | One title + abstract chunk per paper |
-| Query set | 150 generated and frozen queries: keyword, natural question, and semantic paraphrase |
-| Split | 50 dev queries for Hybrid alpha selection; 100 untouched test queries |
-| Systems | BM25, BGE-M3 Dense, Hybrid 0.5, and dev-tuned Hybrid |
-| Metrics | HitRate@5/10, Recall@5/10, MRR@10, nDCG@10, mean/p50/p95 warm latency |
-| Ranking unit | Chunks are retrieved, then deduplicated to papers while preserving rank |
-
-Official-run gates verify corpus size, query distribution, SQLite/FTS/FAISS
-counts, ID-map order, embedding dimension, artifact hashes, and the recorded Git
-revision. The test split is never used to select retrieval parameters.
-
-### Measured Results
-
-| Method | HitRate@5 | HitRate@10 | MRR@10 | nDCG@10 | p50 latency |
-|---|---:|---:|---:|---:|---:|
-| BM25 | 0.8700 | 0.9000 | 0.8093 | 0.8315 | 162.003 ms |
-| BGE-M3 Dense | 0.8900 | 0.9100 | 0.7951 | 0.8233 | 21.237 ms |
-| Hybrid 0.5 | **0.9400** | **0.9500** | **0.8673** | **0.8881** | 203.049 ms |
-
-The dev sweep selected `alpha = 0.50`, so the tuned Hybrid result equals the
-predefined 0.5 baseline. Hybrid improved HitRate@10 by 4 percentage points over
-the best individual retriever. Its largest remaining weakness is semantic
-paraphrase retrieval, where HitRate@10 was 0.8529 compared with 1.0000 for both
-keyword and natural-question queries.
-
-Reproduce the benchmark after building the local 50k artifacts:
+### 2. 准备数据和索引
 
 ```bash
-python -m app.eval.retrieval_eval \
-  --eval data/eval/retrieval_v1.jsonl \
-  --db data/indexes/benchmark_v1/metadata.sqlite \
-  --index-dir data/indexes/benchmark_v1/faiss \
-  --raw data/raw/arxiv_cs_benchmark_v1_50000.jsonl \
-  --manifest reports/benchmark_v1_manifest.json \
-  --output-json reports/retrieval_baseline_v1.json \
-  --output-md reports/retrieval_baseline_v1.md
+python scripts/download_arxiv.py \
+  --size 1000 --output data/raw/arxiv_cs_demo_1000.jsonl
+
+python scripts/build_metadata_db.py \
+  --input data/raw/arxiv_cs_demo_1000.jsonl \
+  --db data/indexes/demo/metadata.sqlite
+
+python scripts/build_fts.py --db data/indexes/demo/metadata.sqlite
+
+python scripts/build_faiss.py \
+  --db data/indexes/demo/metadata.sqlite \
+  --output-dir data/indexes/demo/faiss --batch-size 8
 ```
 
-See the [full Benchmark v1 report](reports/retrieval_baseline_v1.md) for the
-dev alpha sweep, per-query-type results, latency, and deterministic error
-groups.
+### 3. 配置模型并启动
 
-This is a synthetic known-item benchmark: each query is generated from one
-target paper's title and abstract. It supports controlled retriever comparison,
-but it is not presented as a substitute for human relevance judgments or a
-public IR benchmark.
+论文检索可以在没有 LLM API key 的情况下运行。需要真实问答时，复制配置模板，填写自己的接口地址、模型名和 key：
 
-### Current Progress
-
-- Core ingestion, BM25, Dense, Hybrid, RAG, API, and UI paths: complete.
-- Resumable 10k BGE-M3 demo index and operational smoke tests: complete locally.
-- 50k arXiv CS corpus and SQLite/FTS index: complete locally.
-- Query generator, leakage checks, metrics, report builder, and reproducibility
-  gates: complete.
-- Frozen 150-query set and pre-freeze quality audit: complete locally.
-- 50k BGE-M3 FAISS index and official baseline report: complete locally.
-- Retrieval optimization after the measured baseline: not started.
-
-## API Surface
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/` | GET | Browser search interface |
-| `/health` | GET | Index availability and runtime capability status |
-| `/search` | POST | Lexical, Dense, or Hybrid paper search with optional AI Overview |
-| `/ask` | POST | Citation-grounded question answering |
-| `/ask/stream` | POST | SSE progress events and final grounded answer |
-| `/docs` | GET | Interactive OpenAPI documentation |
-
-Example search request:
-
-```json
-{
-  "query": "retrieval augmented generation evaluation",
-  "top_k": 10,
-  "mode": "hybrid",
-  "alpha": 0.5,
-  "include_overview": true
-}
+```bash
+cp .env.example .env
+# 编辑 .env 中的 LLM_BASE_URL、LLM_MODEL 和 LLM_API_KEY
 ```
 
-## Tech Stack
+未配置 key 时，问答使用 Mock Provider，中文关键词改写会跳过。
 
-| Layer | Technology |
-|---|---|
-| API and schemas | FastAPI, Pydantic v2, Uvicorn |
-| Lexical retrieval | SQLite FTS5, BM25 |
-| Dense retrieval | Sentence Transformers, BGE-M3, FAISS IVF |
-| RAG | OpenAI-compatible chat completion API, bounded evidence context |
-| Storage | SQLite, JSONL, local FAISS files |
-| Frontend | Framework-free HTML, CSS, and JavaScript |
-| Testing | Pytest, FastAPI test clients, HTTP and retrieval smoke suites |
+```bash
+CITEQUEST_DB_PATH=data/indexes/demo/metadata.sqlite \
+CITEQUEST_FAISS_DIR=data/indexes/demo/faiss \
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
 
-## Repository Layout
+打开 <http://127.0.0.1:8000> 使用搜索页面，或访问 <http://127.0.0.1:8000/docs> 调试 API。
+
+<details>
+<summary>接口与配置速查</summary>
+
+| 接口 | 用途 |
+| --- | --- |
+| `GET /health` | 检查索引是否就绪 |
+| `POST /search` | 论文检索，可选 AI Overview |
+| `POST /ask` | 引用问答 |
+| `POST /ask/stream` | SSE 阶段反馈与最终回答 |
+
+```bash
+curl http://127.0.0.1:8000/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"RAG evaluation","mode":"hybrid","top_k":5}'
+```
+
+`CITEQUEST_HYBRID_ALPHA` 设置默认关键词权重；请求中的 `alpha` 优先。`CITEQUEST_REWRITE_TIMEOUT_SECONDS` 设置中文查询改写的时间预算。
+
+</details>
+
+## 代码与验证
+
+后端使用 **FastAPI / Pydantic**，检索使用 **SQLite FTS5 / BGE-M3 / FAISS**，前端使用 **HTML / CSS / Alpine.js**。
 
 ```text
 app/
-  ingestion/     normalization and chunk construction
-  retrieval/     BM25, Dense, and Hybrid search
-  rag/           routing, rewriting, context, generation, citations
-  api/           search and question-answering routes
-  eval/          retrieval metrics and operational smoke evaluation
-  core/          schemas and runtime configuration
-scripts/         corpus download, index builds, and benchmark construction
-frontend/        browser search experience
-tests/           unit, integration, and end-to-end smoke tests
+  ingestion/   论文归一化与文本块处理
+  retrieval/   关键词、向量与混合检索
+  rag/         查询路由、改写、上下文、生成与引用校验
+  api/         检索与问答接口
+  eval/        检索评测、诊断与 smoke 验证
+  core/        数据模型与配置
+scripts/       数据下载与索引构建
+frontend/      搜索界面
+tests/         自动化测试
+reports/       正式评测报告
 ```
-
-## Verification
 
 ```bash
 pytest tests/ -v
 ```
 
-The suite covers ingestion, lexical query semantics, vector search, Hybrid
-score direction, resumable FAISS builds, citation validation, API readiness,
-query-set construction, benchmark metrics, artifact gates, and HTTP smoke
-behavior.
+目前有 **273 项测试**，覆盖数据处理、检索、索引恢复、引用校验、API 和评测逻辑。RAG 单元测试使用 Mock Provider。
 
-## Next Milestone
+## 当前边界
 
-1. Diagnose semantic-paraphrase misses with candidate Recall@50 and FAISS
-   `nprobe` sweeps on the dev split.
-2. Determine whether the remaining failures come from candidate generation or
-   score fusion before selecting an optimization.
-3. Evaluate reranking or an alternative fusion method only when the relevant
-   paper is already present in the candidate pool.
-4. Freeze a fresh holdout before claiming optimized v2 results, so Benchmark v1
-   test observations are not reused for model selection.
+- 当前 arXiv 演示与正式评测使用标题和摘要，回答的证据范围限于这些文本。
+- 引用检查验证编号与来源的对应关系，尚未实现逐条论断的语义支持校验。
+- RAG 回答质量仍需要更系统的人工评测；论文对比与自主研究 Agent 尚未实现。
